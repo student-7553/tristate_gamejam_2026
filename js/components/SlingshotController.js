@@ -58,12 +58,15 @@ export class SlingshotController {
     return updates;
   }
 
-  draw(ctx, player) {
+  draw(ctx, player, gravity = 980) {
     if (this.isDragging) {
+      const cx = player.x + player.width / 2;
+      const cy = player.y + player.height / 2;
+
       // Draw slingshot band
       ctx.beginPath();
       ctx.moveTo(this.anchor.x, this.anchor.y);
-      ctx.lineTo(player.x + player.width / 2, player.y + player.height / 2);
+      ctx.lineTo(cx, cy);
       ctx.strokeStyle = '#888888';
       ctx.lineWidth = 4;
       ctx.stroke();
@@ -74,6 +77,23 @@ export class SlingshotController {
       ctx.strokeStyle = 'rgba(200, 200, 200, 0.3)';
       ctx.lineWidth = 1;
       ctx.stroke();
+
+      // Trajectory preview — short dotted arc (5 steps, 0.05 s each = 0.25 s total)
+      const vx = (this.anchor.x - cx) * this.slingshotMultiplier;
+      const vy = (this.anchor.y - cy) * this.slingshotMultiplier;
+      const STEP = 0.05;
+      const STEPS = 5;
+
+      for (let i = 1; i <= STEPS; i++) {
+        const t = i * STEP;
+        const dotX = cx + vx * t;
+        const dotY = cy + vy * t + 0.5 * gravity * t * t;
+        const alpha = (1 - (i - 1) / STEPS) * 0.75; // fades toward the tip
+        ctx.beginPath();
+        ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        ctx.fill();
+      }
     }
   }
 }

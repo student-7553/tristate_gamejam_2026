@@ -44,6 +44,10 @@ export class GameManager {
     // Floor & game over
     this.FLOOR_Y  = height / 2 + 300; // world-space Y of the kill floor
     this.isGameOver = false;
+
+    // Zoom
+    this.zoom       = 1.0;
+    this.targetZoom = 1.0;
   }
 
   /**
@@ -99,11 +103,11 @@ export class GameManager {
 
     if (p.x < this.WORLD_LEFT) {
       p.x = this.WORLD_LEFT;
-      if (p.velocity && p.velocity.x < 0) p.velocity.x = 0;
+      if (!p.isStatic && p.velocity && p.velocity.x < 0) p.velocity.x = -p.velocity.x * 0.3;
     }
     if (p.x + p.width > this.WORLD_RIGHT) {
       p.x = this.WORLD_RIGHT - p.width;
-      if (p.velocity && p.velocity.x > 0) p.velocity.x = 0;
+      if (!p.isStatic && p.velocity && p.velocity.x > 0) p.velocity.x = -p.velocity.x * 0.3;
     }
   }
 
@@ -169,6 +173,8 @@ export class GameManager {
 
     this.bushes = [];
     this.isGameOver = false;
+    this.zoom       = 1.0;
+    this.targetZoom = 1.0;
     this.camera.x = this.width / 2;
     this.camera.y = this.height / 2;
     this.nextBushY = this.height / 2 - 200;
@@ -183,11 +189,15 @@ export class GameManager {
     this._clampPlayer();
     this.checkCollisions();
 
-    // Convert screen-space mouse coords to world-space
+    // Zoom out while the player is pulling back, return to normal when released
+    this.targetZoom = (this.activePlayer && this.activePlayer.slingshot.isDragging) ? 0.75 : 1.0;
+    this.zoom += (this.targetZoom - this.zoom) * (1 - Math.exp(-6 * dt));
+
+    // Convert screen-space mouse coords to world-space (accounts for zoom)
     const worldMouse = {
       ...mouse,
-      x: mouse.x + this.camera.x - this.width / 2,
-      y: mouse.y + this.camera.y - this.height / 2,
+      x: this.camera.x + (mouse.x - this.width  / 2) / this.zoom,
+      y: this.camera.y + (mouse.y - this.height / 2) / this.zoom,
     };
 
     if (this.activePlayer) {
@@ -217,15 +227,17 @@ export class GameManager {
     const GRID_SIZE = 60;
     const ctx = this.ctx;
 
-    // Visible world-space bounds
-    const visLeft   = this.camera.x - this.width  / 2;
-    const visTop    = this.camera.y - this.height / 2;
-    const visRight  = this.camera.x + this.width  / 2;
-    const visBottom = this.camera.y + this.height / 2;
+    // Visible world-space bounds (zoom-corrected: zooming out reveals more world)
+    const halfW = (this.width  / 2) / this.zoom;
+    const halfH = (this.height / 2) / this.zoom;
+    const visLeft   = this.camera.x - halfW;
+    const visTop    = this.camera.y - halfH;
+    const visRight  = this.camera.x + halfW;
+    const visBottom = this.camera.y + halfH;
 
     // Solid fill
     ctx.fillStyle = this.bgColor;
-    ctx.fillRect(visLeft, visTop, this.width, this.height);
+    ctx.fillRect(visLeft, visTop, halfW * 2, halfH * 2);
 
     // Grid lines — snap start to nearest grid boundary
     const startX = Math.floor(visLeft  / GRID_SIZE) * GRID_SIZE;
@@ -249,9 +261,10 @@ export class GameManager {
   /** Draws darker wall overlays outside the corridor bounds. */
   _drawWalls() {
     const ctx = this.ctx;
-    const visTop    = this.camera.y - this.height;
-    const visHeight = this.height * 2;
-    const wallExtent = this.width;
+    const halfH = (this.height / 2) / this.zoom;
+    const visTop    = this.camera.y - halfH * 2;
+    const visHeight = halfH * 4;
+    const wallExtent = this.width / this.zoom;
 
     ctx.fillStyle = '#2a7038';
     ctx.fillRect(this.WORLD_LEFT - wallExtent, visTop, wallExtent, visHeight);
@@ -308,12 +321,11 @@ export class GameManager {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.width, this.height);
 
-    // Translate so that camera world-position maps to screen centre
-    const camOffsetX = this.width  / 2 - this.camera.x;
-    const camOffsetY = this.height / 2 - this.camera.y;
-
     ctx.save();
-    ctx.translate(camOffsetX, camOffsetY);
+    // Scale around screen centre, then position camera
+    ctx.translate(this.width / 2, this.height / 2);
+    ctx.scale(this.zoom, this.zoom);
+    ctx.translate(-this.camera.x, -this.camera.y);
 
     this._drawBackground();
     this._drawWalls();
@@ -321,7 +333,7 @@ export class GameManager {
 
     // Player
     if (this.activePlayer) {
-      this.activePlayer.draw(ctx);
+      this.activePlayer.draw(ctx, this.gravity);
     }
 
     // Bushes
