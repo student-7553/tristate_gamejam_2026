@@ -47,8 +47,8 @@ export class Player {
     }
   }
 
-  draw(ctx) {
-    this.slingshot.draw(ctx, this);
+  draw(ctx, gravity) {
+    this.slingshot.draw(ctx, this, gravity);
 
     ctx.fillStyle = this.color;
     ctx.fillRect(this.x, this.y, this.width, this.height);
