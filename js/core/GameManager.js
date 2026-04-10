@@ -1,4 +1,5 @@
 import { Bush } from '../entities/Bush.js';
+import { SecurityCamera } from '../entities/SecurityCamera.js';
 
 export class GameManager {
   /**
@@ -40,10 +41,17 @@ export class GameManager {
     this.CULL_BEHIND     = 800;  // remove bushes this far below the player
 
     this.nextBushY = 0; // initialized in setPlayer
+    this.nextCamY  = 0; // initialized in setPlayer
+
+    // Security cameras
+    this.securityCameras = [];
+    this.CAM_GAP_MIN    = 400;
+    this.CAM_GAP_RANDOM = 300;
 
     // Floor & game over
-    this.FLOOR_Y  = height / 2 + 300; // world-space Y of the kill floor
-    this.isGameOver = false;
+    this.FLOOR_Y        = height / 2 + 300; // world-space Y of the kill floor
+    this.isGameOver     = false;
+    this.gameOverReason = null; // 'floor' | 'spotted'
 
     // Zoom
     this.zoom       = 1.0;
@@ -71,6 +79,10 @@ export class GameManager {
     // Seed generation starting 200px above the player
     this.nextBushY = player.y + player.height / 2 - 200;
     this._generateBushes();
+
+    // Security cameras start 600px up so the player has breathing room at spawn
+    this.nextCamY = player.y + player.height / 2 - 600;
+    this._generateCameras();
   }
 
   /** Spawns randomised bushes upward until SPAWN_AHEAD distance is covered. */
@@ -94,6 +106,30 @@ export class GameManager {
     const playerY   = this.activePlayer.y + this.activePlayer.height / 2;
     const threshold = playerY + this.CULL_BEHIND;
     this.bushes = this.bushes.filter(b => b.y < threshold);
+  }
+
+  /** Spawns security cameras upward until SPAWN_AHEAD distance is covered. */
+  _generateCameras() {
+    if (!this.activePlayer) return;
+    const playerY = this.activePlayer.y + this.activePlayer.height / 2;
+    const targetY = playerY - this.SPAWN_AHEAD;
+
+    while (this.nextCamY > targetY) {
+      const onLeft   = Math.random() < 0.5;
+      const x        = onLeft ? this.WORLD_LEFT : this.WORLD_RIGHT;
+      const angle    = onLeft ? 0 : Math.PI;
+      const phase    = Math.random() * Math.PI * 2;
+      this.securityCameras.push(new SecurityCamera(x, this.nextCamY, angle, phase));
+      this.nextCamY -= this.CAM_GAP_MIN + Math.random() * this.CAM_GAP_RANDOM;
+    }
+  }
+
+  /** Removes cameras that have scrolled too far below the player. */
+  _cullCameras() {
+    if (!this.activePlayer) return;
+    const playerY   = this.activePlayer.y + this.activePlayer.height / 2;
+    const threshold = playerY + this.CULL_BEHIND;
+    this.securityCameras = this.securityCameras.filter(c => c.y < threshold);
   }
 
   /** Stops the player from leaving the corridor left/right bounds. */
@@ -157,11 +193,30 @@ export class GameManager {
     }
   }
 
+  /** Game over if a camera sees the player (player is hidden only while on a bush). */
+  _checkDetection() {
+    if (!this.activePlayer || this.isGameOver) return;
+    // Hidden while physically resting on a bush
+    if (this.activePlayer.isStatic && this.activePlayer.lastHookedBush) return;
+
+    const px = this.activePlayer.x + this.activePlayer.width / 2;
+    const py = this.activePlayer.y + this.activePlayer.height / 2;
+
+    for (const cam of this.securityCameras) {
+      if (cam.isPointInCone(px, py)) {
+        this.isGameOver     = true;
+        this.gameOverReason = 'spotted';
+        return;
+      }
+    }
+  }
+
   /** Triggers game over if the player's bottom edge crosses the floor. */
   _checkGameOver() {
     if (!this.activePlayer || this.isGameOver) return;
     if (this.activePlayer.y + this.activePlayer.height > this.FLOOR_Y) {
-      this.isGameOver = true;
+      this.isGameOver     = true;
+      this.gameOverReason = 'floor';
     }
   }
 
@@ -171,14 +226,18 @@ export class GameManager {
     const p = this.activePlayer;
     p.reset(this.width / 2 - p.width / 2, this.height / 2 - p.height / 2);
 
-    this.bushes = [];
-    this.isGameOver = false;
-    this.zoom       = 1.0;
-    this.targetZoom = 1.0;
-    this.camera.x = this.width / 2;
-    this.camera.y = this.height / 2;
+    this.bushes          = [];
+    this.securityCameras = [];
+    this.isGameOver      = false;
+    this.gameOverReason  = null;
+    this.zoom            = 1.0;
+    this.targetZoom      = 1.0;
+    this.camera.x  = this.width / 2;
+    this.camera.y  = this.height / 2;
     this.nextBushY = this.height / 2 - 200;
+    this.nextCamY  = this.height / 2 - 600;
     this._generateBushes();
+    this._generateCameras();
   }
 
   /** Called every frame — delegates to every registered component. */
@@ -206,6 +265,9 @@ export class GameManager {
     for (const bush of this.bushes) {
       bush.update(dt, worldMouse);
     }
+    for (const cam of this.securityCameras) {
+      cam.update(dt);
+    }
 
     // Camera: X locked to corridor centre, Y smooth-follows player
     if (this.activePlayer) {
@@ -215,10 +277,13 @@ export class GameManager {
       this.camera.y += (targetY - this.camera.y) * smoothing;
     }
 
-    // Maintain infinite bush stream
+    // Maintain infinite streams
     this._generateBushes();
     this._cullBushes();
+    this._generateCameras();
+    this._cullCameras();
 
+    this._checkDetection();
     this._checkGameOver();
   }
 
@@ -307,9 +372,16 @@ export class GameManager {
     ctx.fillRect(0, 0, this.width, this.height);
 
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#ff4444';
-    ctx.font = 'bold 72px sans-serif';
-    ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 20);
+
+    if (this.gameOverReason === 'spotted') {
+      ctx.fillStyle = '#ffcc00';
+      ctx.font = 'bold 72px sans-serif';
+      ctx.fillText('SPOTTED!', this.width / 2, this.height / 2 - 20);
+    } else {
+      ctx.fillStyle = '#ff4444';
+      ctx.font = 'bold 72px sans-serif';
+      ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 20);
+    }
 
     ctx.fillStyle = '#ffffff';
     ctx.font = '26px sans-serif';
@@ -330,6 +402,11 @@ export class GameManager {
     this._drawBackground();
     this._drawWalls();
     this._drawFloor();
+
+    // Security cameras (drawn before entities so cone appears behind player/bushes)
+    for (const cam of this.securityCameras) {
+      cam.draw(ctx);
+    }
 
     // Player
     if (this.activePlayer) {
