@@ -19,7 +19,12 @@ gameManager.setPlayer(player); // seeds the infinite bush stream automatically
 // --- Input ---
 const keys = {};
 
-window.addEventListener('keydown', (e) => { keys[e.key] = true; });
+window.addEventListener('keydown', (e) => {
+  keys[e.key] = true;
+  if ((e.key === 'r' || e.key === 'R') && gameManager.isGameOver) {
+    gameManager.restart();
+  }
+});
 window.addEventListener('keyup', (e) => { keys[e.key] = false; });
 
 const mouse = { x: 0, y: 0, isDown: false, wasDown: false };

@@ -40,6 +40,10 @@ export class GameManager {
     this.CULL_BEHIND     = 800;  // remove bushes this far below the player
 
     this.nextBushY = 0; // initialized in setPlayer
+
+    // Floor & game over
+    this.FLOOR_Y  = height / 2 + 300; // world-space Y of the kill floor
+    this.isGameOver = false;
   }
 
   /**
@@ -149,8 +153,32 @@ export class GameManager {
     }
   }
 
+  /** Triggers game over if the player's bottom edge crosses the floor. */
+  _checkGameOver() {
+    if (!this.activePlayer || this.isGameOver) return;
+    if (this.activePlayer.y + this.activePlayer.height > this.FLOOR_Y) {
+      this.isGameOver = true;
+    }
+  }
+
+  /** Resets the game back to its initial state. */
+  restart() {
+    if (!this.activePlayer) return;
+    const p = this.activePlayer;
+    p.reset(this.width / 2 - p.width / 2, this.height / 2 - p.height / 2);
+
+    this.bushes = [];
+    this.isGameOver = false;
+    this.camera.x = this.width / 2;
+    this.camera.y = this.height / 2;
+    this.nextBushY = this.height / 2 - 200;
+    this._generateBushes();
+  }
+
   /** Called every frame — delegates to every registered component. */
   update(dt, mouse) {
+    if (this.isGameOver) return;
+
     this.applyPhysics(dt);
     this._clampPlayer();
     this.checkCollisions();
@@ -180,6 +208,8 @@ export class GameManager {
     // Maintain infinite bush stream
     this._generateBushes();
     this._cullBushes();
+
+    this._checkGameOver();
   }
 
   /** Draws an infinite grid pattern in world space so camera movement is visible. */
@@ -238,6 +268,41 @@ export class GameManager {
     ctx.stroke();
   }
 
+  /** Draws the kill floor across the full corridor width (world space). */
+  _drawFloor() {
+    const ctx = this.ctx;
+    const floorH = 24;
+    const extent = this.width;
+
+    ctx.fillStyle = '#7a1a1a';
+    ctx.fillRect(this.WORLD_LEFT - extent, this.FLOOR_Y, (this.WORLD_RIGHT - this.WORLD_LEFT) + extent * 2, floorH);
+
+    // Top edge line
+    ctx.strokeStyle = '#ff4444';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(this.WORLD_LEFT - extent, this.FLOOR_Y);
+    ctx.lineTo(this.WORLD_RIGHT + extent, this.FLOOR_Y);
+    ctx.stroke();
+  }
+
+  /** Draws the game-over overlay in screen space (called outside camera transform). */
+  _drawGameOver() {
+    const ctx = this.ctx;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ff4444';
+    ctx.font = 'bold 72px sans-serif';
+    ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 20);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '26px sans-serif';
+    ctx.fillText('Press R to restart', this.width / 2, this.height / 2 + 36);
+  }
+
   /** Clears the screen, applies camera transform, then draws every entity. */
   draw() {
     const ctx = this.ctx;
@@ -252,6 +317,7 @@ export class GameManager {
 
     this._drawBackground();
     this._drawWalls();
+    this._drawFloor();
 
     // Player
     if (this.activePlayer) {
@@ -264,5 +330,9 @@ export class GameManager {
     }
 
     ctx.restore();
+
+    if (this.isGameOver) {
+      this._drawGameOver();
+    }
   }
 }

@@ -23,6 +23,16 @@ export class Player {
     this.color = '#000000';
   }
 
+  reset(x, y) {
+    this.x = x;
+    this.y = y;
+    this.velocity.x = 0;
+    this.velocity.y = 0;
+    this.isStatic = true;
+    this.lastHookedBush = null;
+    this.slingshot.isDragging = false;
+  }
+
   update(dt, mouse) {
     const updates = this.slingshot.update(this, dt, mouse);
 
