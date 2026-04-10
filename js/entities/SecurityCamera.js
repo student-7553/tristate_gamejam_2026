@@ -21,11 +21,25 @@ export class SecurityCamera {
     this.range    = 320;
 
     this.currentAngle = baseAngle;
+
+    // Set by GameManager._checkDetection() each frame
+    this.isDetecting = false;
   }
 
-  update(dt) {
-    this.sweepTime    += dt * this.sweepSpeed;
-    this.currentAngle  = this.baseAngle + Math.sin(this.sweepTime) * this.sweepRange;
+  update(dt, px = null, py = null) {
+    if (this.isDetecting && px !== null) {
+      // Chase the player — smoothly rotate currentAngle towards them
+      const targetAngle = Math.atan2(py - this.y, px - this.x);
+      let diff = targetAngle - this.currentAngle;
+      while (diff >  Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      this.currentAngle += diff * Math.min(1, 5 * dt);
+      // Keep sweepTime ticking so the sweep resumes naturally when the player hides
+      this.sweepTime += dt * this.sweepSpeed;
+    } else {
+      this.sweepTime    += dt * this.sweepSpeed;
+      this.currentAngle  = this.baseAngle + Math.sin(this.sweepTime) * this.sweepRange;
+    }
   }
 
   /** Returns true if world-space point (px, py) is inside the vision cone. */
@@ -44,7 +58,9 @@ export class SecurityCamera {
   draw(ctx) {
     ctx.save();
 
-    // Vision cone (filled wedge)
+    const alert = this.isDetecting;
+
+    // Vision cone — yellow when sweeping, red when detecting
     ctx.beginPath();
     ctx.moveTo(this.x, this.y);
     ctx.arc(
@@ -53,21 +69,43 @@ export class SecurityCamera {
       this.currentAngle + this.fovAngle / 2
     );
     ctx.closePath();
-    ctx.fillStyle   = 'rgba(255, 220, 0, 0.15)';
+    ctx.fillStyle   = alert ? 'rgba(255, 40, 0, 0.30)' : 'rgba(255, 220, 0, 0.12)';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 200, 0, 0.4)';
-    ctx.lineWidth   = 1.5;
+    ctx.strokeStyle = alert ? 'rgba(255, 60, 0, 0.75)' : 'rgba(255, 200, 0, 0.35)';
+    ctx.lineWidth   = alert ? 2.5 : 1.5;
     ctx.stroke();
 
-    // Camera housing (small rectangle mounted on the wall)
-    ctx.fillStyle = '#1a1a1a';
+    // Camera housing
+    ctx.fillStyle = alert ? '#991100' : '#1a1a1a';
     ctx.fillRect(this.x - 7, this.y - 5, 14, 10);
 
-    // Lens dot
+    // Lens dot — red when detecting, yellow when idle
     ctx.beginPath();
     ctx.arc(this.x, this.y, 3, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffcc00';
+    ctx.fillStyle = alert ? '#ff2200' : '#ffcc00';
     ctx.fill();
+
+    // "!" alert bubble above the camera when detecting
+    if (alert) {
+      const bob  = Math.sin(Date.now() * 0.01) * 2;
+      const bubX = this.x;
+      const bubY = this.y - 24 + bob;
+
+      ctx.beginPath();
+      ctx.arc(bubX, bubY, 10, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(220, 20, 0, 0.9)';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 13px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('!', bubX, bubY);
+      ctx.textBaseline = 'alphabetic';
+    }
 
     ctx.restore();
   }
