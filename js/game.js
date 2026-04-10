@@ -1,5 +1,6 @@
 import { GameManager } from './core/GameManager.js';
 import { Player } from './entities/Player.js';
+import { MusicPlayer } from './audio/MusicPlayer.js';
 
 // --- Config ---
 const SCREEN_WIDTH = 1000;
@@ -11,6 +12,7 @@ const canvas = document.getElementById('game-canvas');
 
 // --- Initialise Core ---
 const gameManager = new GameManager(canvas, SCREEN_WIDTH, SCREEN_HEIGHT, BG_COLOR);
+const music = new MusicPlayer();
 
 // --- Create & Register Entities ---
 const player = new Player(SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -41,6 +43,7 @@ function updateMousePos(e) {
 }
 
 canvas.addEventListener('mousedown', (e) => {
+  music.start(); // AudioContext must be created inside a user gesture
   mouse.isDown = true;
   updateMousePos(e);
 });

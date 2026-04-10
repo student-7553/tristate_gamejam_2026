@@ -46,8 +46,13 @@ export class GameManager {
 
     // Security cameras
     this.securityCameras = [];
-    this.CAM_GAP_MIN    = 400;
-    this.CAM_GAP_RANDOM = 300;
+    this.CAM_GAP_MIN    = 320;
+    this.CAM_GAP_RANDOM = 220;
+
+    // Detection meter — fills when a camera sees the player, drains when hidden
+    this.detectionLevel       = 0;
+    this.DETECTION_FILL_RATE  = 1 / 0.6; // 0.6 s to fill
+    this.DETECTION_DRAIN_RATE = 1 / 0.7; // 0.7 s to fully drain
 
     // Floor & game over
     this.FLOOR_Y        = height / 2 + 300; // world-space Y of the kill floor
@@ -109,18 +114,27 @@ export class GameManager {
 
   }
 
+  /** Returns a 0–1 difficulty factor based on how high the player has climbed. Reaches 1 at height 2500. */
+  _getDifficultyFactor() {
+    return Math.min(1, this.score / 2500);
+  }
+
   /** Spawns randomised bushes upward until SPAWN_AHEAD distance is covered. */
   _generateBushes() {
     if (!this.activePlayer) return;
-    const playerY  = this.activePlayer.y + this.activePlayer.height / 2;
-    const targetY  = playerY - this.SPAWN_AHEAD;
-    const margin   = 30; // bush radius + a little padding
+    const playerY    = this.activePlayer.y + this.activePlayer.height / 2;
+    const targetY    = playerY - this.SPAWN_AHEAD;
+    const margin     = 30;
     const spawnWidth = this.WORLD_RIGHT - this.WORLD_LEFT - margin * 2;
+    const diff       = this._getDifficultyFactor();
+    // Bushes get sparser as difficulty rises: gap grows from 150–250 up to 240–400
+    const gapMin    = this.BUSH_GAP_MIN    + Math.round(diff * 90);
+    const gapRandom = this.BUSH_GAP_RANDOM + Math.round(diff * 70);
 
     while (this.nextBushY > targetY) {
       const x = this.WORLD_LEFT + margin + Math.random() * spawnWidth;
       this.addBush(new Bush(x, this.nextBushY));
-      this.nextBushY -= this.BUSH_GAP_MIN + Math.random() * this.BUSH_GAP_RANDOM;
+      this.nextBushY -= gapMin + Math.random() * gapRandom;
     }
   }
 
@@ -137,14 +151,18 @@ export class GameManager {
     if (!this.activePlayer) return;
     const playerY = this.activePlayer.y + this.activePlayer.height / 2;
     const targetY = playerY - this.SPAWN_AHEAD;
+    const diff    = this._getDifficultyFactor();
+    // Cameras get denser as difficulty rises: gap shrinks from 320–540 down to 140–230
+    const gapMin    = Math.max(140, this.CAM_GAP_MIN    - Math.round(diff * 180));
+    const gapRandom = Math.max(90,  this.CAM_GAP_RANDOM - Math.round(diff * 130));
 
     while (this.nextCamY > targetY) {
-      const onLeft   = Math.random() < 0.5;
-      const x        = onLeft ? this.WORLD_LEFT : this.WORLD_RIGHT;
-      const angle    = onLeft ? 0 : Math.PI;
-      const phase    = Math.random() * Math.PI * 2;
-      this.securityCameras.push(new SecurityCamera(x, this.nextCamY, angle, phase));
-      this.nextCamY -= this.CAM_GAP_MIN + Math.random() * this.CAM_GAP_RANDOM;
+      const onLeft = Math.random() < 0.5;
+      const x      = onLeft ? this.WORLD_LEFT : this.WORLD_RIGHT;
+      const angle  = onLeft ? 0 : Math.PI;
+      const phase  = Math.random() * Math.PI * 2;
+      this.securityCameras.push(new SecurityCamera(x, this.nextCamY, angle, phase, diff));
+      this.nextCamY -= gapMin + Math.random() * gapRandom;
     }
   }
 
@@ -277,21 +295,38 @@ export class GameManager {
     }
   }
 
-  /** Game over if a camera sees the player (player is hidden only while on a bush). */
-  _checkDetection() {
-    if (!this.activePlayer || this.isGameOver) return;
-    // Hidden while physically resting on a bush
-    if (this.activePlayer.isStatic && this.activePlayer.lastHookedBush) return;
-
-    const px = this.activePlayer.x + this.activePlayer.width / 2;
-    const py = this.activePlayer.y + this.activePlayer.height / 2;
-
+  /** Fills a detection meter while any camera sees the player; triggers game over when full. */
+  _checkDetection(dt) {
+    // Reset each camera's alert state every frame
     for (const cam of this.securityCameras) {
-      if (cam.isPointInCone(px, py)) {
+      cam.isDetecting = false;
+    }
+
+    if (!this.activePlayer || this.isGameOver) return;
+
+    // Player is hidden while physically resting on a bush
+    const hidden = this.activePlayer.isStatic && this.activePlayer.lastHookedBush;
+
+    let anyDetecting = false;
+    if (!hidden) {
+      const px = this.activePlayer.x + this.activePlayer.width / 2;
+      const py = this.activePlayer.y + this.activePlayer.height / 2;
+      for (const cam of this.securityCameras) {
+        if (cam.isPointInCone(px, py)) {
+          cam.isDetecting = true;
+          anyDetecting    = true;
+        }
+      }
+    }
+
+    if (anyDetecting) {
+      this.detectionLevel = Math.min(1, this.detectionLevel + this.DETECTION_FILL_RATE * dt);
+      if (this.detectionLevel >= 1) {
         this.isGameOver     = true;
         this.gameOverReason = 'spotted';
-        return;
       }
+    } else {
+      this.detectionLevel = Math.max(0, this.detectionLevel - this.DETECTION_DRAIN_RATE * dt);
     }
   }
 
@@ -327,6 +362,7 @@ export class GameManager {
     this.gameOverReason  = null;
     this.score           = 0;
     this.startY          = this.height / 2;
+    this.detectionLevel  = 0;
     this.zoom            = 1.0;
     this.targetZoom      = 1.0;
     this.camera.x  = this.width / 2;
@@ -365,8 +401,10 @@ export class GameManager {
     for (const bush of this.bushes) {
       bush.update(dt, worldMouse);
     }
+    const px = this.activePlayer ? this.activePlayer.x + this.activePlayer.width  / 2 : null;
+    const py = this.activePlayer ? this.activePlayer.y + this.activePlayer.height / 2 : null;
     for (const cam of this.securityCameras) {
-      cam.update(dt);
+      cam.update(dt, px, py);
     }
 
     for (const shu of this.shurikens) {
@@ -403,7 +441,7 @@ export class GameManager {
     this._cullCameras();
 
     this._updateScore();
-    this._checkDetection();
+    this._checkDetection(dt);
     this._checkGameOver();
   }
 
@@ -451,12 +489,12 @@ export class GameManager {
     const visHeight = halfH * 4;
     const wallExtent = this.width / this.zoom;
 
-    ctx.fillStyle = '#2a7038';
+    ctx.fillStyle = '#14301a';
     ctx.fillRect(this.WORLD_LEFT - wallExtent, visTop, wallExtent, visHeight);
     ctx.fillRect(this.WORLD_RIGHT, visTop, wallExtent, visHeight);
 
     // Edge lines
-    ctx.strokeStyle = '#1a4d25';
+    ctx.strokeStyle = '#0a1f0f';
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.moveTo(this.WORLD_LEFT,  visTop);
@@ -488,12 +526,12 @@ export class GameManager {
   _drawHUD() {
     const ctx = this.ctx;
     ctx.save();
-    ctx.textAlign    = 'left';
-    ctx.shadowColor  = 'rgba(0, 0, 0, 0.8)';
-    ctx.shadowBlur   = 4;
+    ctx.shadowColor   = 'rgba(0, 0, 0, 0.8)';
+    ctx.shadowBlur    = 4;
     ctx.shadowOffsetX = 1;
     ctx.shadowOffsetY = 1;
 
+    ctx.textAlign = 'left';
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 20px sans-serif';
     ctx.fillText(`Height: ${this.score}`, 16, 32);
@@ -503,7 +541,58 @@ export class GameManager {
       ctx.font = '15px sans-serif';
       ctx.fillText(`Best: ${this.bestScore}`, 16, 54);
     }
+
+    // Detection bar — bottom-centre, only visible when meter is non-zero
+    if (this.detectionLevel > 0) {
+      const BAR_W = 220;
+      const BAR_H = 10;
+      const bx = this.width / 2 - BAR_W / 2;
+      const by = this.height - 44;
+
+      // Label
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText('DETECTION', this.width / 2, by - 5);
+
+      // Background track
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+      ctx.fillRect(bx - 2, by - 1, BAR_W + 4, BAR_H + 2);
+
+      // Filled portion — shifts from yellow to red as it fills
+      const g = Math.round(200 * (1 - this.detectionLevel));
+      ctx.fillStyle = `rgb(255, ${g}, 0)`;
+      ctx.fillRect(bx, by, BAR_W * this.detectionLevel, BAR_H);
+    }
+
     ctx.restore();
+  }
+
+  /** Darkens the screen edges and pulses red while a camera is detecting the player. */
+  _drawVignette() {
+    const ctx = this.ctx;
+    const cx  = this.width  / 2;
+    const cy  = this.height / 2;
+    const r1  = Math.min(this.width, this.height) * 0.18;
+    const r2  = Math.max(this.width, this.height) * 0.85;
+
+    // Permanent dark vignette
+    const vg = ctx.createRadialGradient(cx, cy, r1, cx, cy, r2);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.60)');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    // Red pulse overlay while being detected
+    if (this.detectionLevel > 0) {
+      const pulse = 0.5 + 0.5 * Math.sin(Date.now() * 0.009);
+      const alpha = this.detectionLevel * 0.45 * pulse;
+      const rg = ctx.createRadialGradient(cx, cy, r1 * 1.5, cx, cy, r2 * 1.1);
+      rg.addColorStop(0, 'rgba(180,0,0,0)');
+      rg.addColorStop(1, `rgba(180,0,0,${alpha.toFixed(3)})`);
+      ctx.fillStyle = rg;
+      ctx.fillRect(0, 0, this.width, this.height);
+    }
   }
 
   /** Draws the game-over overlay in screen space (called outside camera transform). */
@@ -577,6 +666,8 @@ export class GameManager {
     }
 
     ctx.restore();
+
+    this._drawVignette();
 
     if (this.isGameOver) {
       this._drawGameOver();
