@@ -45,8 +45,8 @@ export class GameManager {
 
     // Security cameras
     this.securityCameras = [];
-    this.CAM_GAP_MIN    = 400;
-    this.CAM_GAP_RANDOM = 300;
+    this.CAM_GAP_MIN    = 320;
+    this.CAM_GAP_RANDOM = 220;
 
     // Detection meter — fills when a camera sees the player, drains when hidden
     this.detectionLevel       = 0;
@@ -97,18 +97,27 @@ export class GameManager {
     this._generateCameras();
   }
 
+  /** Returns a 0–1 difficulty factor based on how high the player has climbed. Reaches 1 at height 2500. */
+  _getDifficultyFactor() {
+    return Math.min(1, this.score / 2500);
+  }
+
   /** Spawns randomised bushes upward until SPAWN_AHEAD distance is covered. */
   _generateBushes() {
     if (!this.activePlayer) return;
-    const playerY  = this.activePlayer.y + this.activePlayer.height / 2;
-    const targetY  = playerY - this.SPAWN_AHEAD;
-    const margin   = 30; // bush radius + a little padding
+    const playerY    = this.activePlayer.y + this.activePlayer.height / 2;
+    const targetY    = playerY - this.SPAWN_AHEAD;
+    const margin     = 30;
     const spawnWidth = this.WORLD_RIGHT - this.WORLD_LEFT - margin * 2;
+    const diff       = this._getDifficultyFactor();
+    // Bushes get sparser as difficulty rises: gap grows from 150–250 up to 240–400
+    const gapMin    = this.BUSH_GAP_MIN    + Math.round(diff * 90);
+    const gapRandom = this.BUSH_GAP_RANDOM + Math.round(diff * 70);
 
     while (this.nextBushY > targetY) {
       const x = this.WORLD_LEFT + margin + Math.random() * spawnWidth;
       this.addBush(new Bush(x, this.nextBushY));
-      this.nextBushY -= this.BUSH_GAP_MIN + Math.random() * this.BUSH_GAP_RANDOM;
+      this.nextBushY -= gapMin + Math.random() * gapRandom;
     }
   }
 
@@ -125,14 +134,18 @@ export class GameManager {
     if (!this.activePlayer) return;
     const playerY = this.activePlayer.y + this.activePlayer.height / 2;
     const targetY = playerY - this.SPAWN_AHEAD;
+    const diff    = this._getDifficultyFactor();
+    // Cameras get denser as difficulty rises: gap shrinks from 320–540 down to 140–230
+    const gapMin    = Math.max(140, this.CAM_GAP_MIN    - Math.round(diff * 180));
+    const gapRandom = Math.max(90,  this.CAM_GAP_RANDOM - Math.round(diff * 130));
 
     while (this.nextCamY > targetY) {
-      const onLeft   = Math.random() < 0.5;
-      const x        = onLeft ? this.WORLD_LEFT : this.WORLD_RIGHT;
-      const angle    = onLeft ? 0 : Math.PI;
-      const phase    = Math.random() * Math.PI * 2;
-      this.securityCameras.push(new SecurityCamera(x, this.nextCamY, angle, phase));
-      this.nextCamY -= this.CAM_GAP_MIN + Math.random() * this.CAM_GAP_RANDOM;
+      const onLeft = Math.random() < 0.5;
+      const x      = onLeft ? this.WORLD_LEFT : this.WORLD_RIGHT;
+      const angle  = onLeft ? 0 : Math.PI;
+      const phase  = Math.random() * Math.PI * 2;
+      this.securityCameras.push(new SecurityCamera(x, this.nextCamY, angle, phase, diff));
+      this.nextCamY -= gapMin + Math.random() * gapRandom;
     }
   }
 

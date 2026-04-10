@@ -5,20 +5,23 @@ export class SecurityCamera {
    * @param {number} baseAngle   - facing direction: 0 for left-wall cam (→), Math.PI for right-wall (←)
    * @param {number} phaseOffset - initial sweep phase so cameras aren't synchronised
    */
-  constructor(x, y, baseAngle, phaseOffset = 0) {
+  /**
+   * @param {number} difficulty  - 0 (easy) to 1 (hard); scales sweep speed, FOV, and range
+   */
+  constructor(x, y, baseAngle, phaseOffset = 0, difficulty = 0) {
     this.x         = x;
     this.y         = y;
     this.baseAngle = baseAngle;
     this.isStatic  = true;
 
-    // Sweep behaviour — randomised per camera so they feel independent
-    this.sweepRange = Math.PI / 3 + Math.random() * (Math.PI / 6); // ±60°–±90°
-    this.sweepSpeed = 0.8 + Math.random() * 0.7;                    // 0.8–1.5 rad/s
+    // Sweep — faster and wider at higher difficulty
+    this.sweepRange = Math.PI / 3 + Math.random() * (Math.PI / 6) + difficulty * (Math.PI / 8);
+    this.sweepSpeed = (0.8 + Math.random() * 0.7) * (1 + difficulty * 1.5); // up to 2.75× faster
     this.sweepTime  = phaseOffset;
 
-    // Vision cone
-    this.fovAngle = Math.PI / 4; // 45° total (±22.5° from look direction)
-    this.range    = 320;
+    // Vision cone — wider FOV and longer range at higher difficulty
+    this.fovAngle = Math.PI / 4 + difficulty * (Math.PI / 9); // 45° → ~65°
+    this.range    = 320 + Math.round(difficulty * 110);        // 320 → 430 px
 
     this.currentAngle = baseAngle;
 
