@@ -2,8 +2,8 @@ export class SlingshotController {
   constructor(anchorX, anchorY) {
     this.anchor = { x: anchorX, y: anchorY };
     this.isDragging = false;
-    this.maxDragDistance = 150;
-    this.slingshotMultiplier = 10;
+    this.maxDragDistance = 100;
+    this.slingshotMultiplier = 12;
   }
 
   update(player, dt, mouse) {
@@ -16,10 +16,10 @@ export class SlingshotController {
       if (mouse && mouse.isDown && !mouse.wasDown) {
         // Check if mouse is over or near the player
         const distToPlayer = Math.hypot(mouse.x - cx, mouse.y - cy);
-        if (distToPlayer < 50) { 
+        if (distToPlayer < 50) {
           this.isDragging = true;
           // Set anchor to where the player currently is so we slingshot from here
-          this.anchor = { x: cx, y: cy }; 
+          this.anchor = { x: cx, y: cy };
         }
       }
 

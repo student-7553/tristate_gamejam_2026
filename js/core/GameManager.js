@@ -21,16 +21,17 @@ export class GameManager {
     this.gravity = 980; // pixels per second squared
 
     /** @type {Array<{update:(dt:number)=>void, draw:(ctx:CanvasRenderingContext2D)=>void}>} */
-    this.components = [];
+    this.bushes = [];
     this.activePlayer = null;
+    this.camera = { x: 0, y: 0 };
   }
 
   /**
-   * Register a component / entity so the manager will update & draw it.
-   * @param {object} component – must expose update(dt) and draw(ctx)
+   * Register a bush so the manager will update & draw it.
+   * @param {object} bush
    */
-  addComponent(component) {
-    this.components.push(component);
+  addBush(bush) {
+    this.bushes.push(bush);
   }
 
   /**
@@ -58,8 +59,38 @@ export class GameManager {
     };
 
     applyToEntity(this.activePlayer);
-    for (const component of this.components) {
-      applyToEntity(component);
+    for (const bush of this.bushes) {
+      applyToEntity(bush);
+    }
+  }
+
+  checkCollisions() {
+    if (!this.activePlayer) return;
+
+    const px = this.activePlayer.x + this.activePlayer.width / 2;
+    const py = this.activePlayer.y + this.activePlayer.height / 2;
+
+    for (const bush of this.bushes) {
+      const dist = Math.hypot(px - bush.x, py - bush.y);
+      const threshold = bush.radius + this.activePlayer.width / 2;
+
+      if (dist < threshold) {
+        // Hook into the bush if we are moving, it's not disabled, and not escaping the same bush
+        if (!this.activePlayer.isStatic && this.activePlayer.lastHookedBush !== bush && !bush.isDisabled) {
+          this.activePlayer.isStatic = true;
+          this.activePlayer.velocity.x = 0;
+          this.activePlayer.velocity.y = 0;
+          this.activePlayer.x = bush.x - this.activePlayer.width / 2;
+          this.activePlayer.y = bush.y - this.activePlayer.height / 2;
+          this.activePlayer.lastHookedBush = bush;
+          bush.isDisabled = true;
+        }
+      } else {
+        // If we are far enough from the bush we last hooked to, clear it so we can hook again later
+        if (this.activePlayer.lastHookedBush === bush && dist > threshold) {
+          this.activePlayer.lastHookedBush = null;
+        }
+      }
     }
   }
 
@@ -68,11 +99,30 @@ export class GameManager {
     // Compute all new locations before frame update logic
     this.applyPhysics(dt);
 
+    // Check custom collisions (hooking into bushes)
+    this.checkCollisions();
+
+    let worldMouse = mouse;
+
     if (this.activePlayer) {
-      this.activePlayer.update(dt, mouse);
+      // Update camera so the player is strictly in the centre of the window
+      this.camera.x = this.width / 2 - (this.activePlayer.x + this.activePlayer.width / 2);
+      this.camera.y = this.height / 2 - (this.activePlayer.y + this.activePlayer.height / 2);
+
+      // Translate the actual mouse screen coordinates into world coordinates for logic checking
+      if (mouse) {
+        worldMouse = {
+          ...mouse,
+          x: mouse.x - this.camera.x,
+          y: mouse.y - this.camera.y
+        };
+      }
+
+      this.activePlayer.update(dt, worldMouse);
     }
-    for (const component of this.components) {
-      component.update(dt, mouse);
+
+    for (const bush of this.bushes) {
+      bush.update(dt, worldMouse);
     }
   }
 
@@ -80,18 +130,25 @@ export class GameManager {
   draw() {
     this.ctx.clearRect(0, 0, this.width, this.height);
 
-    // Background
+    // Background (fixed to screen, do not translate)
     this.ctx.fillStyle = this.bgColor;
     this.ctx.fillRect(0, 0, this.width, this.height);
+
+    // Apply Camera translation
+    this.ctx.save();
+    this.ctx.translate(this.camera.x, this.camera.y);
 
     // Player
     if (this.activePlayer) {
       this.activePlayer.draw(this.ctx);
     }
 
-    // Components
-    for (const component of this.components) {
-      component.draw(this.ctx);
+    // Bushes
+    for (const bush of this.bushes) {
+      bush.draw(this.ctx);
     }
+
+    // Restore context back to normal screen space
+    this.ctx.restore();
   }
 }
