@@ -1,5 +1,6 @@
 import { Bush } from '../entities/Bush.js';
 import { SecurityCamera } from '../entities/SecurityCamera.js';
+import { shuriken } from '../entities/shuriken.js';
 
 export class GameManager {
   /**
@@ -61,6 +62,20 @@ export class GameManager {
     this.score     = 0;
     this.bestScore = 0;
     this.startY    = 0; // set in setPlayer
+
+
+    this.shurikens = [];
+
+    // spawn timing (
+    this.shuSpawnTimer = 0;
+    this.SHU_MIN_INTERVAL = 0.4;
+    this.SHU_MAX_INTERVAL = 1.6;
+    this.nextShuInterval = this.SHU_MIN_INTERVAL;
+    
+    // speed randomness
+    this.SHU_SPEED_MIN = 160;
+    this.SHU_SPEED_MAX = 420;
+
   }
 
   /**
@@ -90,6 +105,8 @@ export class GameManager {
     // Security cameras start 600px up so the player has breathing room at spawn
     this.nextCamY = player.y + player.height / 2 - 600;
     this._generateCameras();
+
+
   }
 
   /** Spawns randomised bushes upward until SPAWN_AHEAD distance is covered. */
@@ -131,12 +148,72 @@ export class GameManager {
     }
   }
 
+  _spawnShurikenWave() {
+    if (!this.activePlayer) return;
+
+    const playerY = this.activePlayer.y + this.activePlayer.height / 2;
+
+  // 🎯 small, controlled height above player
+    const baseOffset = 120; // always slightly above
+    const randomOffset = Math.random() * 180; // small variation
+
+    const offsetY = - (baseOffset + randomOffset);
+
+    const speed = 250;
+
+    const spawnLeft = Math.random() < 0.5;
+
+    if (spawnLeft) {
+      this.shurikens.push(
+        new shuriken(this.WORLD_LEFT, playerY + offsetY, speed)
+      );
+    } else {
+      this.shurikens.push(
+        new shuriken(this.WORLD_RIGHT, playerY + offsetY, -speed)
+      );
+    }
+  }
+
+
+  
+  _checkShurikenCollisions() {
+    if (!this.activePlayer || this.isGameOver) return;
+
+  // 🛡 SAFE ZONE: player is on a bush
+    if (this.activePlayer.isStatic && this.activePlayer.lastHookedBush) {
+      return;
+    }
+
+    const px = this.activePlayer.x + this.activePlayer.width / 2;
+    const py = this.activePlayer.y + this.activePlayer.height / 2;
+
+    for (const s of this.shurikens) {
+      const dist = Math.hypot(px - s.x, py - s.y);
+      const threshold = s.size + this.activePlayer.width / 2;
+
+      if (dist < threshold) {
+        this.isGameOver = true;
+        this.gameOverReason = "shuriken";
+        return;
+      }
+    } 
+  }
   /** Removes cameras that have scrolled too far below the player. */
   _cullCameras() {
     if (!this.activePlayer) return;
     const playerY   = this.activePlayer.y + this.activePlayer.height / 2;
     const threshold = playerY + this.CULL_BEHIND;
     this.securityCameras = this.securityCameras.filter(c => c.y < threshold);
+  }
+
+
+  _cullShurikens() {
+  if (!this.activePlayer) return;
+
+  const playerY = this.activePlayer.y + this.activePlayer.height / 2;
+  const threshold = playerY + this.CULL_BEHIND;
+
+  this.shurikens = this.shurikens.filter(s => s.y < threshold);
   }
 
   /** Stops the player from leaving the corridor left/right bounds. */
@@ -258,6 +335,9 @@ export class GameManager {
     this.nextCamY  = this.height / 2 - 600;
     this._generateBushes();
     this._generateCameras();
+    this.shurikens = [];
+    this.shuSpawnTimer = 0;
+    this.nextShuInterval = 0.8 + Math.random() * 0.8;
   }
 
   /** Called every frame — delegates to every registered component. */
@@ -288,6 +368,25 @@ export class GameManager {
     for (const cam of this.securityCameras) {
       cam.update(dt);
     }
+
+    for (const shu of this.shurikens) {
+      shu.update(dt);
+    }
+    this._checkShurikenCollisions();
+
+// TIMER-BASED SPAWNER
+    this.shuSpawnTimer += dt;
+
+    if (this.shuSpawnTimer >= this.nextShuInterval) {
+      this._spawnShurikenWave();
+
+      this.shuSpawnTimer = 0;
+      this.nextShuInterval =
+      this.SHU_MIN_INTERVAL +
+      Math.random() * (this.SHU_MAX_INTERVAL - this.SHU_MIN_INTERVAL);
+    }
+
+    this._cullShurikens();
 
     // Camera: X locked to corridor centre, Y smooth-follows player
     if (this.activePlayer) {
@@ -470,6 +569,11 @@ export class GameManager {
     // Bushes
     for (const bush of this.bushes) {
       bush.draw(ctx);
+    }
+
+// Shurikens
+    for (const shu of this.shurikens) {
+      shu.draw(ctx);
     }
 
     ctx.restore();
