@@ -4,7 +4,7 @@ import { Player } from './entities/Player.js';
 // --- Config ---
 const SCREEN_WIDTH = 1000;
 const SCREEN_HEIGHT = 800;
-const BG_COLOR = '#3faa51ff';
+const BG_COLOR = 'rgb(57, 76, 60)';
 
 // --- Canvas Setup ---
 const canvas = document.getElementById('game-canvas');
