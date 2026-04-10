@@ -1,5 +1,6 @@
 import { GameManager } from './core/GameManager.js';
 import { Player } from './entities/Player.js';
+import { Bush } from './entities/Bush.js';
 
 // --- Config ---
 const SCREEN_WIDTH = 1000;
@@ -15,6 +16,15 @@ const gameManager = new GameManager(canvas, SCREEN_WIDTH, SCREEN_HEIGHT, BG_COLO
 // --- Create & Register Entities ---
 const player = new Player(SCREEN_WIDTH, SCREEN_HEIGHT);
 gameManager.setPlayer(player);
+
+// Create 5 bushes consecutively upwards 200px each from the player's starting center
+const startY = SCREEN_HEIGHT / 2;
+const startX = SCREEN_WIDTH / 2;
+
+for (let i = 1; i <= 5; i++) {
+  const bush = new Bush(startX, startY - (i * 200));
+  gameManager.addBush(bush);
+}
 
 // --- Input ---
 const keys = {};
