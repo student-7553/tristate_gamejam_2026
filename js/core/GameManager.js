@@ -1,3 +1,5 @@
+import { Bush } from '../entities/Bush.js';
+
 export class GameManager {
   /**
    * @param {HTMLCanvasElement} canvas
@@ -25,6 +27,19 @@ export class GameManager {
 
     // Camera tracks world-space position of the screen centre
     this.camera = { x: width / 2, y: height / 2 };
+
+    // World corridor: play area is a vertical strip centered on the screen
+    this.CORRIDOR_HALF_WIDTH = 200;
+    this.WORLD_LEFT  = width / 2 - this.CORRIDOR_HALF_WIDTH;
+    this.WORLD_RIGHT = width / 2 + this.CORRIDOR_HALF_WIDTH;
+
+    // Infinite bush generation
+    this.BUSH_GAP_MIN    = 150; // minimum vertical gap between bushes
+    this.BUSH_GAP_RANDOM = 100; // extra random variation on top of minimum
+    this.SPAWN_AHEAD     = 1500; // generate bushes this far above the player
+    this.CULL_BEHIND     = 800;  // remove bushes this far below the player
+
+    this.nextBushY = 0; // initialized in setPlayer
   }
 
   /**
@@ -36,26 +51,63 @@ export class GameManager {
   }
 
   /**
-   * Set the active player for the game.
+   * Set the active player and seed the first batch of bushes.
    * @param {object} player
    */
   setPlayer(player) {
     this.activePlayer = player;
-    // Snap camera to player immediately so there is no initial slide
-    this.camera.x = player.x + player.width / 2;
+    // Camera X is fixed to corridor centre; only Y follows the player
+    this.camera.x = this.width / 2;
     this.camera.y = player.y + player.height / 2;
+
+    // Seed generation starting 200px above the player
+    this.nextBushY = player.y + player.height / 2 - 200;
+    this._generateBushes();
+  }
+
+  /** Spawns randomised bushes upward until SPAWN_AHEAD distance is covered. */
+  _generateBushes() {
+    if (!this.activePlayer) return;
+    const playerY  = this.activePlayer.y + this.activePlayer.height / 2;
+    const targetY  = playerY - this.SPAWN_AHEAD;
+    const margin   = 30; // bush radius + a little padding
+    const spawnWidth = this.WORLD_RIGHT - this.WORLD_LEFT - margin * 2;
+
+    while (this.nextBushY > targetY) {
+      const x = this.WORLD_LEFT + margin + Math.random() * spawnWidth;
+      this.addBush(new Bush(x, this.nextBushY));
+      this.nextBushY -= this.BUSH_GAP_MIN + Math.random() * this.BUSH_GAP_RANDOM;
+    }
+  }
+
+  /** Removes bushes that have scrolled too far below the player. */
+  _cullBushes() {
+    if (!this.activePlayer) return;
+    const playerY   = this.activePlayer.y + this.activePlayer.height / 2;
+    const threshold = playerY + this.CULL_BEHIND;
+    this.bushes = this.bushes.filter(b => b.y < threshold);
+  }
+
+  /** Stops the player from leaving the corridor left/right bounds. */
+  _clampPlayer() {
+    if (!this.activePlayer) return;
+    const p = this.activePlayer;
+
+    if (p.x < this.WORLD_LEFT) {
+      p.x = this.WORLD_LEFT;
+      if (p.velocity && p.velocity.x < 0) p.velocity.x = 0;
+    }
+    if (p.x + p.width > this.WORLD_RIGHT) {
+      p.x = this.WORLD_RIGHT - p.width;
+      if (p.velocity && p.velocity.x > 0) p.velocity.x = 0;
+    }
   }
 
   /** Applies physics including gravity to all non-static entities. */
   applyPhysics(dt) {
     const applyToEntity = (entity) => {
-      // Skip if entity doesn't exist, is static, or lacks basic physics properties
       if (!entity || entity.isStatic || !entity.velocity) return;
-
-      // Apply gravity to change vertical velocity
       entity.velocity.y += this.gravity * dt;
-
-      // Update position based on velocity
       if (entity.x !== undefined && entity.y !== undefined) {
         entity.x += entity.velocity.x * dt;
         entity.y += entity.velocity.y * dt;
@@ -80,7 +132,6 @@ export class GameManager {
       const threshold = bush.radius + this.activePlayer.width / 2;
 
       if (dist < threshold) {
-        // Hook into the bush if we are moving, it's not disabled, and not escaping the same bush
         if (!this.activePlayer.isStatic && this.activePlayer.lastHookedBush !== bush && !bush.isDisabled) {
           this.activePlayer.isStatic = true;
           this.activePlayer.velocity.x = 0;
@@ -91,7 +142,6 @@ export class GameManager {
           bush.isDisabled = true;
         }
       } else {
-        // If we are far enough from the bush we last hooked to, clear it so we can hook again later
         if (this.activePlayer.lastHookedBush === bush && dist > threshold) {
           this.activePlayer.lastHookedBush = null;
         }
@@ -101,14 +151,11 @@ export class GameManager {
 
   /** Called every frame — delegates to every registered component. */
   update(dt, mouse) {
-    // Compute all new locations before frame update logic
     this.applyPhysics(dt);
-
-    // Check custom collisions (hooking into bushes)
+    this._clampPlayer();
     this.checkCollisions();
 
-    // Convert screen-space mouse coords to world-space so that components
-    // (e.g. SlingshotController) work correctly regardless of camera position.
+    // Convert screen-space mouse coords to world-space
     const worldMouse = {
       ...mouse,
       x: mouse.x + this.camera.x - this.width / 2,
@@ -122,14 +169,17 @@ export class GameManager {
       bush.update(dt, worldMouse);
     }
 
-    // Smooth camera follow — exponential decay, frame-rate independent
+    // Camera: X locked to corridor centre, Y smooth-follows player
     if (this.activePlayer) {
-      const targetX = this.activePlayer.x + this.activePlayer.width / 2;
-      const targetY = this.activePlayer.y + this.activePlayer.height / 2;
+      const targetY  = this.activePlayer.y + this.activePlayer.height / 2;
       const smoothing = 1 - Math.exp(-8 * dt);
-      this.camera.x += (targetX - this.camera.x) * smoothing;
+      this.camera.x  = this.width / 2;
       this.camera.y += (targetY - this.camera.y) * smoothing;
     }
+
+    // Maintain infinite bush stream
+    this._generateBushes();
+    this._cullBushes();
   }
 
   /** Draws an infinite grid pattern in world space so camera movement is visible. */
@@ -166,6 +216,28 @@ export class GameManager {
     ctx.stroke();
   }
 
+  /** Draws darker wall overlays outside the corridor bounds. */
+  _drawWalls() {
+    const ctx = this.ctx;
+    const visTop    = this.camera.y - this.height;
+    const visHeight = this.height * 2;
+    const wallExtent = this.width;
+
+    ctx.fillStyle = '#2a7038';
+    ctx.fillRect(this.WORLD_LEFT - wallExtent, visTop, wallExtent, visHeight);
+    ctx.fillRect(this.WORLD_RIGHT, visTop, wallExtent, visHeight);
+
+    // Edge lines
+    ctx.strokeStyle = '#1a4d25';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(this.WORLD_LEFT,  visTop);
+    ctx.lineTo(this.WORLD_LEFT,  visTop + visHeight);
+    ctx.moveTo(this.WORLD_RIGHT, visTop);
+    ctx.lineTo(this.WORLD_RIGHT, visTop + visHeight);
+    ctx.stroke();
+  }
+
   /** Clears the screen, applies camera transform, then draws every entity. */
   draw() {
     const ctx = this.ctx;
@@ -179,6 +251,7 @@ export class GameManager {
     ctx.translate(camOffsetX, camOffsetY);
 
     this._drawBackground();
+    this._drawWalls();
 
     // Player
     if (this.activePlayer) {
