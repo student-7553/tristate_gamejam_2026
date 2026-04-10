@@ -56,6 +56,11 @@ export class GameManager {
     // Zoom
     this.zoom       = 1.0;
     this.targetZoom = 1.0;
+
+    // Score — how many pixels above spawn the player has reached
+    this.score     = 0;
+    this.bestScore = 0;
+    this.startY    = 0; // set in setPlayer
   }
 
   /**
@@ -72,6 +77,8 @@ export class GameManager {
    */
   setPlayer(player) {
     this.activePlayer = player;
+    this.startY = player.y + player.height / 2;
+
     // Camera X is fixed to corridor centre; only Y follows the player
     this.camera.x = this.width / 2;
     this.camera.y = player.y + player.height / 2;
@@ -211,6 +218,17 @@ export class GameManager {
     }
   }
 
+  /** Updates score to the highest point the player has reached above spawn. */
+  _updateScore() {
+    if (!this.activePlayer) return;
+    const playerCenterY = this.activePlayer.y + this.activePlayer.height / 2;
+    const dist = Math.max(0, Math.floor(this.startY - playerCenterY));
+    if (dist > this.score) {
+      this.score = dist;
+      if (this.score > this.bestScore) this.bestScore = this.score;
+    }
+  }
+
   /** Triggers game over if the player's bottom edge crosses the floor. */
   _checkGameOver() {
     if (!this.activePlayer || this.isGameOver) return;
@@ -230,6 +248,8 @@ export class GameManager {
     this.securityCameras = [];
     this.isGameOver      = false;
     this.gameOverReason  = null;
+    this.score           = 0;
+    this.startY          = this.height / 2;
     this.zoom            = 1.0;
     this.targetZoom      = 1.0;
     this.camera.x  = this.width / 2;
@@ -283,6 +303,7 @@ export class GameManager {
     this._generateCameras();
     this._cullCameras();
 
+    this._updateScore();
     this._checkDetection();
     this._checkGameOver();
   }
@@ -364,6 +385,28 @@ export class GameManager {
     ctx.stroke();
   }
 
+  /** Draws the live score in the top-left corner (screen space). */
+  _drawHUD() {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.textAlign    = 'left';
+    ctx.shadowColor  = 'rgba(0, 0, 0, 0.8)';
+    ctx.shadowBlur   = 4;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 1;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(`Height: ${this.score}`, 16, 32);
+
+    if (this.bestScore > 0) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.font = '15px sans-serif';
+      ctx.fillText(`Best: ${this.bestScore}`, 16, 54);
+    }
+    ctx.restore();
+  }
+
   /** Draws the game-over overlay in screen space (called outside camera transform). */
   _drawGameOver() {
     const ctx = this.ctx;
@@ -376,16 +419,27 @@ export class GameManager {
     if (this.gameOverReason === 'spotted') {
       ctx.fillStyle = '#ffcc00';
       ctx.font = 'bold 72px sans-serif';
-      ctx.fillText('SPOTTED!', this.width / 2, this.height / 2 - 20);
+      ctx.fillText('SPOTTED!', this.width / 2, this.height / 2 - 50);
     } else {
       ctx.fillStyle = '#ff4444';
       ctx.font = 'bold 72px sans-serif';
-      ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 20);
+      ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 50);
+    }
+
+    const isNewBest = this.score > 0 && this.score >= this.bestScore;
+    ctx.fillStyle = isNewBest ? '#ffcc00' : '#cccccc';
+    ctx.font = 'bold 26px sans-serif';
+    ctx.fillText(`Height: ${this.score}${isNewBest ? '  NEW BEST!' : ''}`, this.width / 2, this.height / 2 + 10);
+
+    if (!isNewBest && this.bestScore > 0) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.font = '18px sans-serif';
+      ctx.fillText(`Best: ${this.bestScore}`, this.width / 2, this.height / 2 + 36);
     }
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = '26px sans-serif';
-    ctx.fillText('Press R to restart', this.width / 2, this.height / 2 + 36);
+    ctx.font = '22px sans-serif';
+    ctx.fillText('Press R to restart', this.width / 2, this.height / 2 + 68);
   }
 
   /** Clears the screen, applies camera transform, then draws every entity. */
@@ -422,6 +476,8 @@ export class GameManager {
 
     if (this.isGameOver) {
       this._drawGameOver();
+    } else {
+      this._drawHUD();
     }
   }
 }
