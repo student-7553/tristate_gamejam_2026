@@ -185,9 +185,10 @@ export class GameManager {
   }
 
 
-  /** Returns a 0–1 difficulty factor based on how high the player has climbed. Reaches 1 at height 2500. */
+  /** Returns a 0–1 difficulty factor based on how high the player has climbed above camera spawn height. */
   _getDifficultyFactor() {
-    return Math.min(1, this.score / 2500);
+    const activeScore = Math.max(0, this.score - this.CAMERA_SPAWN_HEIGHT);
+    return Math.min(1, activeScore / 2500);
   }
 
   /** Spawns randomised bushes upward until SPAWN_AHEAD distance is covered. */
