@@ -15,21 +15,38 @@ export class shuriken {
     this.rotation += this.rotationSpeed * dt;
   }
 
-  draw(ctx) {
-    ctx.save();
 
-    ctx.translate(this.x, this.y);
-    ctx.rotate(this.rotation);
+draw(ctx) {
+  ctx.save();
 
-    ctx.fillStyle = "#ff0000";
+  ctx.translate(this.x, this.y);
+  ctx.rotate(this.rotation);
 
-    ctx.beginPath();
-    ctx.moveTo(0, -this.size);
-    ctx.lineTo(this.size, this.size);
-    ctx.lineTo(-this.size, this.size);
+  ctx.fillStyle = "#292929";
+
+  const spikeLength = this.size;
+  const spikeWidth = this.size / 2;
+
+  ctx.beginPath();
+
+  for (let i = 0; i < 4; i++) {
+    ctx.moveTo(0, -spikeLength);
+    ctx.lineTo(spikeWidth, 0);
+    ctx.lineTo(0, spikeWidth);
+    ctx.lineTo(-spikeWidth, 0);
     ctx.closePath();
-    ctx.fill();
 
-    ctx.restore();
+    ctx.rotate(Math.PI / 2); // rotate 90° for next spike
   }
+
+  ctx.fill();
+
+  // center circle
+  ctx.beginPath();
+  ctx.arc(0, 0, this.size / 4, 0, Math.PI * 2);
+  ctx.fillStyle = "#000000";
+  ctx.fill();
+
+  ctx.restore();
 }
+  }
