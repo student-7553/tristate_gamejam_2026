@@ -474,6 +474,7 @@ _generateSpikes() {
           this.activePlayer.lastHookedBush = null;
           bush.isDisabled = true;
           this._spawnLeafParticles(bush);
+          this.bushes = this.bushes.filter((b) => b !== bush);
         }
       }
     }
