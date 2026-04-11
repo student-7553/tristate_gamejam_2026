@@ -70,6 +70,7 @@ export class GameManager {
 
 
     this.shurikens = [];
+    this.leafParticles = [];
 
     // spawn timing (
     this.shuSpawnTimer = 0;
@@ -225,6 +226,29 @@ export class GameManager {
   }
 
 
+  _spawnLeafParticles(bush) {
+    const colors = ['#2d7a2d', '#256b25', '#1f5c1f', '#3a8a3a', '#4d9e4d'];
+    const count = 10 + Math.floor(Math.random() * 6); // 10–15 leaves
+    for (let i = 0; i < count; i++) {
+      const angle  = Math.random() * Math.PI * 2;
+      const speed  = 40 + Math.random() * 120;
+      const life   = 1.2 + Math.random() * 1.0;
+      this.leafParticles.push({
+        x:      bush.x + (Math.random() - 0.5) * bush.radius * 1.5,
+        y:      bush.y + (Math.random() - 0.5) * bush.radius * 1.5,
+        vx:     Math.cos(angle) * speed,
+        vy:     Math.sin(angle) * speed - 60, // slight upward burst
+        life,
+        maxLife: life,
+        color:  colors[Math.floor(Math.random() * colors.length)],
+        w:      4 + Math.random() * 4,
+        h:      2 + Math.random() * 2,
+        angle:  Math.random() * Math.PI * 2,
+        angVel: (Math.random() - 0.5) * 8,
+      });
+    }
+  }
+
   _cullShurikens() {
   if (!this.activePlayer) return;
 
@@ -285,11 +309,13 @@ export class GameManager {
           this.activePlayer.x = bush.x - this.activePlayer.width / 2;
           this.activePlayer.y = bush.y - this.activePlayer.height / 2;
           this.activePlayer.lastHookedBush = bush;
-          bush.isDisabled = true;
+          // Bush stays visually intact while the player is on it
         }
       } else {
-        if (this.activePlayer.lastHookedBush === bush && dist > threshold) {
+        if (this.activePlayer.lastHookedBush === bush) {
           this.activePlayer.lastHookedBush = null;
+          bush.isDisabled = true;
+          this._spawnLeafParticles(bush);
         }
       }
     }
@@ -426,12 +452,37 @@ export class GameManager {
 
     this._cullShurikens();
 
-    // Camera: X locked to corridor centre, Y smooth-follows player
+    // Update leaf particles
+    for (let i = this.leafParticles.length - 1; i >= 0; i--) {
+      const p = this.leafParticles[i];
+      p.vy += 200 * dt; // gentle gravity
+      p.vx *= Math.pow(0.92, dt * 60); // light air resistance
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.angle += p.angVel * dt;
+      p.life -= dt;
+      if (p.life <= 0) this.leafParticles.splice(i, 1);
+    }
+
+    // Camera: X follows corridor centre, Y smooth-follows player.
+    // While slingshotting: offset camera 180° opposite the drag so the player
+    // can see further in the direction they are about to launch.
     if (this.activePlayer) {
-      const targetY  = this.activePlayer.y + this.activePlayer.height / 2;
+      const playerCY = this.activePlayer.y + this.activePlayer.height / 2;
+      const slingshot = this.activePlayer.slingshot;
+
+      let targetCameraX = this.width / 2;
+      let targetCameraY = playerCY;
+
+      if (slingshot.isDragging) {
+        const lookAheadScale = 2.5;
+        targetCameraX = this.width / 2 - slingshot.dragDx * lookAheadScale;
+        targetCameraY = playerCY - slingshot.dragDy * lookAheadScale;
+      }
+
       const smoothing = 1 - Math.exp(-8 * dt);
-      this.camera.x  = this.width / 2;
-      this.camera.y += (targetY - this.camera.y) * smoothing;
+      this.camera.x += (targetCameraX - this.camera.x) * smoothing;
+      this.camera.y += (targetCameraY - this.camera.y) * smoothing;
     }
 
     // Maintain infinite streams
@@ -658,6 +709,18 @@ export class GameManager {
     // Bushes
     for (const bush of this.bushes) {
       bush.draw(ctx);
+    }
+
+    // Leaf particles
+    for (const p of this.leafParticles) {
+      const alpha = Math.max(0, p.life / p.maxLife);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.angle);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
     }
 
 // Shurikens
