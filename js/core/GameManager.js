@@ -4,6 +4,7 @@ import { shuriken } from '../entities/shuriken.js';
 import { TreeBackground } from '../entities/TreeBackground.js';
 import { BorderTile } from '../entities/BorderTile.js';
 import { WallSpikes } from '../entities/Wallspikes.js';
+import { Cloud } from '../entities/Cloud.js';
 
 export class GameManager {
   /**
@@ -105,6 +106,10 @@ export class GameManager {
     this.CAMERA_SPAWN_HEIGHT = 4000;
     this.WALLSPIKE_SPAWN_HEIGHT = 800;
 
+    this.clouds = [];
+    for (let i = 0; i < 20; i++) {
+      this.clouds.push(new Cloud(width, height));
+    }
   }
 
   /**
@@ -587,6 +592,9 @@ _generateSpikes() {
     for (const bush of this.bushes) {
       bush.update(dt);
     }
+    for (const cloud of this.clouds) {
+      cloud.update(dt);
+    }
 
     // Zoom update comes AFTER player.update so isDragging reflects this frame's state.
     // Smooth in both directions — no snap needed since input is now screen-space.
@@ -822,6 +830,10 @@ _generateSpikes() {
     ctx.translate(-this.camera.x, -this.camera.y);
 
     this._drawBackground();
+
+    for (const cloud of this.clouds) {
+      cloud.draw(ctx, this.camera.x, this.camera.y);
+    }
 
     // Visible bounds for rendering optimization
     const halfW = (this.width / 2) / this.zoom;
