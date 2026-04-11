@@ -16,37 +16,37 @@ export class shuriken {
   }
 
 
-draw(ctx) {
-  ctx.save();
+  draw(ctx) {
+    ctx.save();
 
-  ctx.translate(this.x, this.y);
-  ctx.rotate(this.rotation);
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rotation);
 
-  ctx.fillStyle = "#292929";
+    ctx.fillStyle = "#bbbbbbff";
 
-  const spikeLength = this.size;
-  const spikeWidth = this.size / 2;
+    const spikeLength = this.size;
+    const spikeWidth = this.size / 2;
 
-  ctx.beginPath();
+    ctx.beginPath();
 
-  for (let i = 0; i < 4; i++) {
-    ctx.moveTo(0, -spikeLength);
-    ctx.lineTo(spikeWidth, 0);
-    ctx.lineTo(0, spikeWidth);
-    ctx.lineTo(-spikeWidth, 0);
-    ctx.closePath();
+    for (let i = 0; i < 4; i++) {
+      ctx.moveTo(0, -spikeLength);
+      ctx.lineTo(spikeWidth, 0);
+      ctx.lineTo(0, spikeWidth);
+      ctx.lineTo(-spikeWidth, 0);
+      ctx.closePath();
 
-    ctx.rotate(Math.PI / 2); // rotate 90° for next spike
-  }
+      ctx.rotate(Math.PI / 2); // rotate 90° for next spike
+    }
 
-  ctx.fill();
+    ctx.fill();
 
-  // center circle
-  ctx.beginPath();
-  ctx.arc(0, 0, this.size / 4, 0, Math.PI * 2);
-  ctx.fillStyle = "#000000";
-  ctx.fill();
+    // center circle
+    ctx.beginPath();
+    ctx.arc(0, 0, this.size / 4, 0, Math.PI * 2);
+    ctx.fillStyle = "#000000";
+    ctx.fill();
 
-  ctx.restore();
+    ctx.restore();
   }
 }
