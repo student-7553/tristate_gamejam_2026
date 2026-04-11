@@ -103,7 +103,7 @@ export class GameManager {
     // spawn height for entities
     this.SHU_SPAWN_HEIGHT = 1500;
     this.CAMERA_SPAWN_HEIGHT = 4000;
-    this.WALLSPIKE_SPAWN_HEIGHT = 900;
+    this.WALLSPIKE_SPAWN_HEIGHT = 800;
 
   }
 
@@ -335,7 +335,7 @@ _generateSpikes() {
 
 
 
-  const unlockWorldY = this.startY - this.SPIKE_SPAWN_HEIGHT;
+  const unlockWorldY = this.startY - this.WALLSPIKE_SPAWN_HEIGHT;
 
   // clamp starting position
   if (this.nextSpikeY > unlockWorldY) {
@@ -547,6 +547,7 @@ _generateSpikes() {
     this.leafParticles = [];
     this.shuSpawnTimer = 0;
     this.nextShuInterval = 0.8 + Math.random() * 0.8;
+    this.nextSpikeY = this.activePlayer.y + this.activePlayer.height / 2 - 200;
 
     this.treeBackgrounds = [];
     this.borderTiles = [];
