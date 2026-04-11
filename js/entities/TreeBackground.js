@@ -3,9 +3,9 @@ sharedSprite.src = 'assets/art/tilemap_edited_packed.png';
 
 // List of 3 possible trees/background tiles to randomly choose from
 const spriteVariations = [
-    { sx: 18 * 20 + 1, sy: 18 * 4 + 1, sWidth: 16, sHeight: 16 }, // Tile 1 (Original)
-    { sx: 18 * 20 + 1, sy: 18 * 5 + 1, sWidth: 16, sHeight: 16 }, // Tile 2 (Customize here)
-    { sx: 18 * 20 + 1, sy: 18 * 6 + 1, sWidth: 16, sHeight: 16 }  // Tile 3 (Customize here)
+    { sx: 18 * 20, sy: 18 * 4, sWidth: 18, sHeight: 18 }, // Tile 1 (Original)
+    // { sx: 18 * 20 + 1, sy: 18 * 5 + 1, sWidth: 16, sHeight: 16 }, // Tile 2 (Customize here)
+    // { sx: 18 * 20 + 1, sy: 18 * 6 + 1, sWidth: 16, sHeight: 16 }  // Tile 3 (Customize here)
 ];
 
 export class TreeBackground {

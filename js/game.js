@@ -5,7 +5,9 @@ import { MusicPlayer } from './audio/MusicPlayer.js';
 // --- Config ---
 const SCREEN_WIDTH = 1000;
 const SCREEN_HEIGHT = 800;
-const BG_COLOR = '#4a90e2';
+// const BG_COLOR = '#4a90e2';
+const BG_COLOR = '#DFF6F5';
+// 
 
 // --- Canvas Setup ---
 const canvas = document.getElementById('game-canvas');

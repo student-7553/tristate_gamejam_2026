@@ -2,15 +2,13 @@ const sharedSprite = new Image();
 sharedSprite.src = 'assets/art/tilemap_edited_packed.png';
 
 const leftVariations = [
-    { sx: 18 * 20, sy: 18 * 0, sWidth: 16, sHeight: 16 }, // Left Tile 1 (Original)
-    { sx: 18 * 20, sy: 18 * 1, sWidth: 16, sHeight: 16 }, // Left Tile 2 (Customize here)
-    // { sx: 18 * 20, sy: 18 * 2, sWidth: 16, sHeight: 16 }  // Left Tile 3 (Customize here)
+    { sx: 18 * 20, sy: 18 * 0, sWidth: 18, sHeight: 18 }, // Left Tile 1 (Original)
+    { sx: 18 * 20, sy: 18 * 1, sWidth: 18, sHeight: 18 }, // Left Tile 2 (Customize here)
 ];
 
 const rightVariations = [
-    { sx: 18 * 20, sy: 18 * 2, sWidth: 16, sHeight: 16 }, // Right Tile 1 (Original)
-    // { sx: 18 * 20, sy: 18 * 1, sWidth: 16, sHeight: 16 }, // Right Tile 2 (Customize here)
-    { sx: 18 * 20, sy: 18 * 3, sWidth: 16, sHeight: 16 }  // Right Tile 3 (Customize here)
+    { sx: 18 * 20, sy: 18 * 2, sWidth: 18, sHeight: 18 }, // Right Tile 1 (Original)
+    { sx: 18 * 20, sy: 18 * 3, sWidth: 18, sHeight: 18 }  // Right Tile 3 (Customize here)
 ];
 
 export class BorderTile {

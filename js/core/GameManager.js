@@ -160,11 +160,18 @@ export class GameManager {
     const endX = Math.floor((this.width / 2 + halfVis + GRID_SIZE) / GRID_SIZE) * GRID_SIZE;
 
     while (this.nextTreeY > targetY) {
+      // 1. Explicitly place border tiles at the wall edges (guaranteed to render for any GRID_SIZE)
+      this.borderTiles.push(new BorderTile(this.WORLD_LEFT - GRID_SIZE, this.nextTreeY, GRID_SIZE, true));
+      this.borderTiles.push(new BorderTile(this.WORLD_RIGHT, this.nextTreeY, GRID_SIZE, false));
+
+      // 2. Fill in the background trees
       for (let x = startX; x <= endX; x += GRID_SIZE) {
-        if (x === this.WORLD_LEFT - GRID_SIZE || x === this.WORLD_RIGHT) {
-          const isLeft = x === this.WORLD_LEFT - GRID_SIZE;
-          this.borderTiles.push(new BorderTile(x, this.nextTreeY, GRID_SIZE, isLeft));
-        } else if (x >= this.WORLD_LEFT && x < this.WORLD_RIGHT) {
+        // Skip the corridor and the wall areas
+        const isPlayableArea = x >= this.WORLD_LEFT && x < this.WORLD_RIGHT;
+        const isWallArea = (x >= this.WORLD_LEFT - GRID_SIZE && x < this.WORLD_LEFT) ||
+          (x >= this.WORLD_RIGHT && x < this.WORLD_RIGHT + GRID_SIZE);
+
+        if (isPlayableArea && !isWallArea) {
           this.treeBackgrounds.push(new TreeBackground(x, this.nextTreeY, GRID_SIZE));
         }
       }
@@ -675,28 +682,7 @@ _generateSpikes() {
     // Solid fill
     ctx.fillStyle = this.bgColor;
     ctx.fillRect(visLeft, visTop, halfW * 2, halfH * 2);
-
-    // Grid lines — snap start to nearest grid boundary
-    const startX = Math.floor(visLeft / GRID_SIZE) * GRID_SIZE;
-    const startY = Math.floor(visTop / GRID_SIZE) * GRID_SIZE;
-
-    ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
-    ctx.lineWidth = 1;
-
-    for (let x = startX; x <= visRight; x += GRID_SIZE) {
-      ctx.moveTo(x, visTop);
-      ctx.lineTo(x, visBottom);
-    }
-    for (let y = startY; y <= visBottom; y += GRID_SIZE) {
-      ctx.moveTo(visLeft, y);
-      ctx.lineTo(visRight, y);
-    }
-    ctx.stroke();
   }
-
-  // Old shaded walls removed in favor of BorderTiles
-  // }
 
   /** Draws the kill floor across the full corridor width (world space). */
   _drawFloor() {

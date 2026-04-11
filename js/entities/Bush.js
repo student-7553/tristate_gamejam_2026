@@ -1,3 +1,20 @@
+const sharedSprite = new Image();
+sharedSprite.src = 'assets/art/tilemap_edited_packed.png';
+
+const BUSH_SPRITE_CONFIG = {
+  sx: 18 * 17,      // Bush tile x coordinates (customize here)
+  sy: 18 * 0,      // Bush tile y coordinates (customize here)
+  sWidth: 18 * 3,
+  sHeight: 18 * 3
+};
+
+// const BUSH_OVERLAY_SPRITE_CONFIG = {
+//   sx: 18 * 17,      // Bush overlay tile x coordinates (customize here)
+//   sy: 18 * 0,      // Bush overlay tile y coordinates (customize here)
+//   sWidth: 18 * 3,
+//   sHeight: 18 * 3
+// };
+
 export class Bush {
   constructor(x, y) {
     this.x = x;
@@ -6,6 +23,10 @@ export class Bush {
     this.type = 'bush';
     this.isStatic = true; // No physics apply to the bush
     this.isDisabled = false;
+
+    this.sprite = sharedSprite;
+    this.spriteConfig = BUSH_SPRITE_CONFIG;
+    // this.overlaySpriteConfig = BUSH_OVERLAY_SPRITE_CONFIG;
   }
 
   update(dt, mouse) {
@@ -13,40 +34,66 @@ export class Bush {
   }
 
   draw(ctx) {
+    if (!this.sprite.complete || this.sprite.naturalWidth === 0) return;
+
     ctx.save();
+    const drawSize = this.radius * 3; // roughly 44px
+    const dx = this.x - drawSize / 2;
+    const dy = this.y - drawSize / 2;
+
+    const drawSize2 = this.radius * 1.5;
+    const dx2 = this.x - drawSize2 / 2;
+    const dy2 = this.y - drawSize2 / 2;
 
     if (this.isDisabled) {
-      // Flattened, used-up look
-      ctx.fillStyle = '#2a2a2a';
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.radius * 0.75, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#1a1a1a';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
+      // Flattened, squished look when used
+      ctx.translate(this.x, this.y + this.radius / 2);
+      // ctx.scale(1, 0.4);
+      ctx.drawImage(
+        this.sprite,
+        this.spriteConfig.sx,
+        this.spriteConfig.sy,
+        this.spriteConfig.sWidth,
+        this.spriteConfig.sHeight,
+        -drawSize / 2,
+        -drawSize / 2 - this.radius / 2,
+        drawSize,
+        drawSize
+      );
+      // ctx.drawImage(
+      //   this.sprite,
+      //   this.overlaySpriteConfig.sx,
+      //   this.overlaySpriteConfig.sy,
+      //   this.overlaySpriteConfig.sWidth,
+      //   this.overlaySpriteConfig.sHeight,
+      //   -drawSize2 / 2,
+      //   -drawSize2 / 2 - this.radius / 2,
+      //   drawSize2,
+      //   drawSize2
+      // );
     } else {
-      // Multi-blob bushy look — overlapping circles in dark greens
-      const blobs = [
-        { ox: 0,                    oy:  this.radius * 0.1,   r: this.radius,        color: '#1f5c1f' },
-        { ox: -this.radius * 0.55,  oy:  this.radius * 0.15,  r: this.radius * 0.78, color: '#256b25' },
-        { ox:  this.radius * 0.55,  oy:  this.radius * 0.15,  r: this.radius * 0.78, color: '#256b25' },
-        { ox: -this.radius * 0.25,  oy: -this.radius * 0.45,  r: this.radius * 0.65, color: '#2d7a2d' },
-        { ox:  this.radius * 0.25,  oy: -this.radius * 0.50,  r: this.radius * 0.6,  color: '#2d7a2d' },
-      ];
-
-      for (const b of blobs) {
-        ctx.beginPath();
-        ctx.arc(this.x + b.ox, this.y + b.oy, b.r, 0, Math.PI * 2);
-        ctx.fillStyle = b.color;
-        ctx.fill();
-      }
-
-      // Subtle dark outline to distinguish from the background
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.radius * 1.05, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      ctx.drawImage(
+        this.sprite,
+        this.spriteConfig.sx,
+        this.spriteConfig.sy,
+        this.spriteConfig.sWidth,
+        this.spriteConfig.sHeight,
+        dx,
+        dy,
+        drawSize,
+        drawSize
+      );
+      // ctx.drawImage(
+      //   this.sprite,
+      //   this.overlaySpriteConfig.sx,
+      //   this.overlaySpriteConfig.sy,
+      //   this.overlaySpriteConfig.sWidth,
+      //   this.overlaySpriteConfig.sHeight,
+      //   dx2,
+      //   dy2,
+      //   drawSize2,
+      //   drawSize2
+      // );
     }
 
     ctx.restore();
