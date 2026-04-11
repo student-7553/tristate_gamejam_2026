@@ -6,19 +6,17 @@ export class Player {
    * @param {number} screenHeight
    */
   constructor(screenWidth, screenHeight) {
-    this.width = 32;
+    this.width  = 32;
     this.height = 32;
 
-    // Spawn at the centre of the screen
-    this.x = screenWidth / 2 - this.width / 2;
+    this.x = screenWidth  / 2 - this.width  / 2;
     this.y = screenHeight / 2 - this.height / 2;
 
-    // Physics
     this.velocity = { x: 0, y: 0 };
-    this.isStatic = true;
+    this.isStatic      = true;
+    this.isWallClinging = false;
 
-    // Slingshot Controller
-    this.slingshot = new SlingshotController(screenWidth / 2, screenHeight / 2);
+    this.slingshot = new SlingshotController(screenWidth, screenHeight);
 
     this.color = '#000000';
   }
@@ -26,20 +24,30 @@ export class Player {
   reset(x, y) {
     this.x = x;
     this.y = y;
-    this.velocity.x = 0;
-    this.velocity.y = 0;
-    this.isStatic = true;
+    this.velocity.x   = 0;
+    this.velocity.y   = 0;
+    this.isStatic       = true;
+    this.isWallClinging = false;
     this.lastHookedBush = null;
     this.slingshot.isDragging = false;
+    this.slingshot.dragDx     = 0;
+    this.slingshot.dragDy     = 0;
   }
 
-  update(dt, mouse) {
-    const updates = this.slingshot.update(this, dt, mouse);
+  /**
+   * @param {number} dt
+   * @param {object} screenMouse  - raw screen-space mouse
+   * @param {{x,y}}  camera       - world-space camera centre
+   * @param {number} zoom
+   */
+  update(dt, screenMouse, camera, zoom) {
+    const updates = this.slingshot.update(this, dt, screenMouse, camera, zoom);
 
     if (updates) {
-      if (updates.x !== undefined) this.x = updates.x;
-      if (updates.y !== undefined) this.y = updates.y;
-      if (updates.isStatic !== undefined) this.isStatic = updates.isStatic;
+      if (updates.isStatic !== undefined) {
+        this.isStatic = updates.isStatic;
+        if (!updates.isStatic) this.isWallClinging = false; // launch clears wall cling
+      }
       if (updates.velocity) {
         this.velocity.x = updates.velocity.x;
         this.velocity.y = updates.velocity.y;
@@ -47,8 +55,8 @@ export class Player {
     }
   }
 
-  draw(ctx, gravity) {
-    this.slingshot.draw(ctx, this, gravity);
+  draw(ctx, gravity, zoom) {
+    this.slingshot.draw(ctx, this, zoom, gravity);
 
     ctx.fillStyle = this.color;
     ctx.fillRect(this.x, this.y, this.width, this.height);

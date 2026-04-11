@@ -22,7 +22,8 @@ export class GameManager {
     this.canvas.height = this.height;
 
     // Physics properties
-    this.gravity = 980; // pixels per second squared
+    this.gravity         = 980; // pixels per second squared
+    this.WALL_SLIDE_SPEED = 80; // px/s slide-down speed while clinging to a wall
 
     this.bushes = [];
     this.activePlayer = null;
@@ -258,18 +259,33 @@ export class GameManager {
   this.shurikens = this.shurikens.filter(s => s.y < threshold);
   }
 
-  /** Stops the player from leaving the corridor left/right bounds. */
-  _clampPlayer() {
+  /** Stops the player from leaving the corridor; wall-cling on impact while airborne. */
+  _clampPlayer(dt) {
     if (!this.activePlayer) return;
     const p = this.activePlayer;
 
-    if (p.x < this.WORLD_LEFT) {
-      p.x = this.WORLD_LEFT;
-      if (!p.isStatic && p.velocity && p.velocity.x < 0) p.velocity.x = -p.velocity.x * 0.3;
+    const hitLeft  = p.x < this.WORLD_LEFT;
+    const hitRight = p.x + p.width > this.WORLD_RIGHT;
+
+    if (hitLeft || hitRight) {
+      // Pin to wall
+      p.x = hitLeft ? this.WORLD_LEFT : this.WORLD_RIGHT - p.width;
+
+      if (!p.isStatic) {
+        // First contact while airborne → start clinging
+        p.velocity.x    = 0;
+        p.velocity.y    = 0;
+        p.isStatic      = true;
+        p.isWallClinging = true;
+      }
     }
-    if (p.x + p.width > this.WORLD_RIGHT) {
-      p.x = this.WORLD_RIGHT - p.width;
-      if (!p.isStatic && p.velocity && p.velocity.x > 0) p.velocity.x = -p.velocity.x * 0.3;
+
+    // Slide down while clinging
+    if (p.isWallClinging) {
+      p.y += this.WALL_SLIDE_SPEED * dt;
+      // Keep x pinned to whichever wall the player is on
+      if (p.x <= this.WORLD_LEFT)                 p.x = this.WORLD_LEFT;
+      else if (p.x + p.width >= this.WORLD_RIGHT) p.x = this.WORLD_RIGHT - p.width;
     }
   }
 
@@ -303,7 +319,8 @@ export class GameManager {
 
       if (dist < threshold) {
         if (!this.activePlayer.isStatic && this.activePlayer.lastHookedBush !== bush && !bush.isDisabled) {
-          this.activePlayer.isStatic = true;
+          this.activePlayer.isStatic       = true;
+          this.activePlayer.isWallClinging  = false; // wall-cling ends when catching a bush
           this.activePlayer.velocity.x = 0;
           this.activePlayer.velocity.y = 0;
           this.activePlayer.x = bush.x - this.activePlayer.width / 2;
@@ -397,7 +414,8 @@ export class GameManager {
     this.nextCamY  = this.height / 2 - 600;
     this._generateBushes();
     this._generateCameras();
-    this.shurikens = [];
+    this.shurikens    = [];
+    this.leafParticles = [];
     this.shuSpawnTimer = 0;
     this.nextShuInterval = 0.8 + Math.random() * 0.8;
   }
@@ -407,26 +425,22 @@ export class GameManager {
     if (this.isGameOver) return;
 
     this.applyPhysics(dt);
-    this._clampPlayer();
+    this._clampPlayer(dt);
     this.checkCollisions();
 
-    // Zoom out while the player is pulling back, return to normal when released
-    this.targetZoom = (this.activePlayer && this.activePlayer.slingshot.isDragging) ? 0.75 : 1.0;
-    this.zoom += (this.targetZoom - this.zoom) * (1 - Math.exp(-6 * dt));
-
-    // Convert screen-space mouse coords to world-space (accounts for zoom)
-    const worldMouse = {
-      ...mouse,
-      x: this.camera.x + (mouse.x - this.width  / 2) / this.zoom,
-      y: this.camera.y + (mouse.y - this.height / 2) / this.zoom,
-    };
-
+    // Pass raw screen-space mouse so the slingshot can work entirely in screen space,
+    // immune to zoom transitions.
     if (this.activePlayer) {
-      this.activePlayer.update(dt, worldMouse);
+      this.activePlayer.update(dt, mouse, this.camera, this.zoom);
     }
     for (const bush of this.bushes) {
-      bush.update(dt, worldMouse);
+      bush.update(dt);
     }
+
+    // Zoom update comes AFTER player.update so isDragging reflects this frame's state.
+    // Smooth in both directions — no snap needed since input is now screen-space.
+    this.targetZoom = (this.activePlayer && this.activePlayer.slingshot.isDragging) ? 0.75 : 1.0;
+    this.zoom += (this.targetZoom - this.zoom) * (1 - Math.exp(-6 * dt));
     const px = this.activePlayer ? this.activePlayer.x + this.activePlayer.width  / 2 : null;
     const py = this.activePlayer ? this.activePlayer.y + this.activePlayer.height / 2 : null;
     for (const cam of this.securityCameras) {
@@ -703,7 +717,7 @@ export class GameManager {
 
     // Player
     if (this.activePlayer) {
-      this.activePlayer.draw(ctx, this.gravity);
+      this.activePlayer.draw(ctx, this.gravity, this.zoom);
     }
 
     // Bushes
