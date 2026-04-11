@@ -48,5 +48,5 @@ draw(ctx) {
   ctx.fill();
 
   ctx.restore();
-}
   }
+}

@@ -3,6 +3,7 @@ import { SecurityCamera } from '../entities/SecurityCamera.js';
 import { shuriken } from '../entities/shuriken.js';
 import { TreeBackground } from '../entities/TreeBackground.js';
 import { BorderTile } from '../entities/BorderTile.js';
+import { WallSpikes } from '../entities/Wallspikes.js';
 
 export class GameManager {
   /**
@@ -12,6 +13,9 @@ export class GameManager {
    * @param {string} bgColor      - default background colour
    */
   constructor(canvas, width, height, bgColor = '#1a1a2e') {
+
+
+
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.ctx.imageSmoothingEnabled = false;
@@ -90,6 +94,17 @@ export class GameManager {
     this.SHU_SPEED_MIN = 160;
     this.SHU_SPEED_MAX = 420;
 
+    // wallspikes
+    this.wallSpikes = [];
+    this.SPIKE_GAP_MIN = 260;
+    this.SPIKE_GAP_RANDOM = 180;
+    this.nextSpikeY = 0;
+
+    // spawn height for entities
+    this.SHU_SPAWN_HEIGHT = 1500;
+    this.CAMERA_SPAWN_HEIGHT = 4000;
+    this.WALLSPIKE_SPAWN_HEIGHT = 900;
+
   }
 
   /**
@@ -123,6 +138,12 @@ export class GameManager {
     // Trees
     this.nextTreeY = player.y + player.height / 2 + 600;
     this._generateTrees();
+
+    //Wall spikes
+    this.nextSpikeY = player.y + player.height / 2 - 900;
+    this._generateSpikes();
+
+    this.nextSpikeY = 0;
   }
 
   _generateTrees() {
@@ -187,6 +208,12 @@ export class GameManager {
   /** Spawns security cameras upward until SPAWN_AHEAD distance is covered. */
   _generateCameras() {
     if (!this.activePlayer) return;
+    // Do not spawn above the unlock line
+    const unlockWorldY = this.startY - this.CAMERA_SPAWN_HEIGHT;
+    if (this.nextCamY > unlockWorldY) {
+    this.nextCamY = unlockWorldY;
+    }
+
     const playerY = this.activePlayer.y + this.activePlayer.height / 2;
     const targetY = playerY - this.SPAWN_AHEAD;
     const diff = this._getDifficultyFactor();
@@ -209,7 +236,14 @@ export class GameManager {
 
     const playerY = this.activePlayer.y + this.activePlayer.height / 2;
 
-    // 🎯 small, controlled height above player
+
+      // Convert unlock height to world position
+    const unlockWorldY = this.startY - this.SHU_SPAWN_HEIGHT;
+
+      // Do not spawn above the unlock line
+      if (playerY > unlockWorldY) return;
+
+    // small, controlled height above player
     const baseOffset = 120; // always slightly above
     const randomOffset = Math.random() * 180; // small variation
 
@@ -235,7 +269,6 @@ export class GameManager {
   _checkShurikenCollisions() {
     if (!this.activePlayer || this.isGameOver) return;
 
-    // 🛡 SAFE ZONE: player is on a bush
     if (this.activePlayer.isStatic && this.activePlayer.lastHookedBush) {
       return;
     }
@@ -295,6 +328,63 @@ export class GameManager {
     this.shurikens = this.shurikens.filter(s => s.y < threshold);
   }
 
+
+
+_generateSpikes() {
+  if (!this.activePlayer) return;
+
+
+
+  const unlockWorldY = this.startY - this.SPIKE_SPAWN_HEIGHT;
+
+  // clamp starting position
+  if (this.nextSpikeY > unlockWorldY) {
+    this.nextSpikeY = unlockWorldY;
+  }
+
+  const playerY = this.activePlayer.y + this.activePlayer.height / 2;
+  const targetY = playerY - this.SPAWN_AHEAD;
+
+  while (this.nextSpikeY > targetY) {
+
+    const onLeft = Math.random() < 0.5;
+    const x = onLeft ? this.WORLD_LEFT : this.WORLD_RIGHT;
+
+    const count = 2 + Math.floor(Math.random() * 4); // 2–5 spikes
+
+    this.wallSpikes.push(
+      new WallSpikes(x, this.nextSpikeY, onLeft, count)
+    );
+
+    this.nextSpikeY -= this.SPIKE_GAP_MIN + Math.random() * this.SPIKE_GAP_RANDOM;
+  }
+}
+
+
+  _cullSpikes() {
+    if (!this.activePlayer) return;
+
+    const playerY = this.activePlayer.y + this.activePlayer.height / 2;
+    const threshold = playerY + this.CULL_BEHIND;
+
+    this.wallSpikes = this.wallSpikes.filter(s => s.y < threshold);
+}
+
+  _checkSpikeCollisions() {
+    if (!this.activePlayer || this.isGameOver) return;
+
+    const px = this.activePlayer.x + this.activePlayer.width / 2;
+    const py = this.activePlayer.y + this.activePlayer.height / 2;
+
+    for (const spike of this.wallSpikes) {
+      if (spike.isPointTouching(px, py)) {
+        this.isGameOver = true;
+        this.gameOverReason = "spikes";
+        return;
+      }
+    }
+  }
+
   /** Stops the player from leaving the corridor; wall-cling on impact while airborne. */
   _clampPlayer(dt) {
     if (!this.activePlayer) return;
@@ -341,6 +431,9 @@ export class GameManager {
       applyToEntity(bush);
     }
   }
+
+
+  
 
   /** Checks whether the player has landed on a bush and hooks them together. */
   checkCollisions() {
@@ -515,6 +608,11 @@ export class GameManager {
     }
 
     this._cullShurikens();
+
+
+    this._generateSpikes();
+    this._cullSpikes();
+    this._checkSpikeCollisions();
 
     // Update leaf particles
     for (let i = this.leafParticles.length - 1; i >= 0; i--) {
@@ -790,6 +888,11 @@ export class GameManager {
     // Shurikens
     for (const shu of this.shurikens) {
       shu.draw(ctx);
+    }
+
+    // wall spikes
+    for (const spike of this.wallSpikes) {
+      spike.draw(ctx);
     }
 
     ctx.restore();
