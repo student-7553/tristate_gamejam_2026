@@ -1,6 +1,8 @@
 import { Bush } from '../entities/Bush.js';
 import { SecurityCamera } from '../entities/SecurityCamera.js';
 import { shuriken } from '../entities/shuriken.js';
+import { TreeBackground } from '../entities/TreeBackground.js';
+import { BorderTile } from '../entities/BorderTile.js';
 
 export class GameManager {
   /**
@@ -12,6 +14,7 @@ export class GameManager {
   constructor(canvas, width, height, bgColor = '#1a1a2e') {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
+    this.ctx.imageSmoothingEnabled = false;
 
     this.width = width;
     this.height = height;
@@ -22,7 +25,7 @@ export class GameManager {
     this.canvas.height = this.height;
 
     // Physics properties
-    this.gravity         = 980; // pixels per second squared
+    this.gravity = 980; // pixels per second squared
     this.WALL_SLIDE_SPEED = 80; // px/s slide-down speed while clinging to a wall
 
     this.bushes = [];
@@ -33,41 +36,45 @@ export class GameManager {
 
     // World corridor: play area is a vertical strip centered on the screen
     this.CORRIDOR_HALF_WIDTH = 200;
-    this.WORLD_LEFT  = width / 2 - this.CORRIDOR_HALF_WIDTH;
+    this.WORLD_LEFT = width / 2 - this.CORRIDOR_HALF_WIDTH;
     this.WORLD_RIGHT = width / 2 + this.CORRIDOR_HALF_WIDTH;
 
     // Infinite bush generation
-    this.BUSH_GAP_MIN    = 150; // minimum vertical gap between bushes
+    this.BUSH_GAP_MIN = 150; // minimum vertical gap between bushes
     this.BUSH_GAP_RANDOM = 100; // extra random variation on top of minimum
-    this.SPAWN_AHEAD     = 1500; // generate bushes this far above the player
-    this.CULL_BEHIND     = 800;  // remove bushes this far below the player
+    this.SPAWN_AHEAD = 1500; // generate bushes this far above the player
+    this.CULL_BEHIND = 800;  // remove bushes this far below the player
 
     this.nextBushY = 0; // initialized in setPlayer
-    this.nextCamY  = 0; // initialized in setPlayer
+    this.nextCamY = 0; // initialized in setPlayer
+
+    this.treeBackgrounds = [];
+    this.borderTiles = [];
+    this.nextTreeY = 0; // initialized in setPlayer
 
     // Security cameras
     this.securityCameras = [];
-    this.CAM_GAP_MIN    = 320;
+    this.CAM_GAP_MIN = 320;
     this.CAM_GAP_RANDOM = 220;
 
     // Detection meter — fills when a camera sees the player, drains when hidden
-    this.detectionLevel       = 0;
-    this.DETECTION_FILL_RATE  = 1 / 0.6; // 0.6 s to fill
+    this.detectionLevel = 0;
+    this.DETECTION_FILL_RATE = 1 / 0.6; // 0.6 s to fill
     this.DETECTION_DRAIN_RATE = 1 / 0.7; // 0.7 s to fully drain
 
     // Floor & game over
-    this.FLOOR_Y        = height / 2 + 300; // world-space Y of the kill floor
-    this.isGameOver     = false;
+    this.FLOOR_Y = height / 2 + 300; // world-space Y of the kill floor
+    this.isGameOver = false;
     this.gameOverReason = null; // 'floor' | 'spotted'
 
     // Zoom
-    this.zoom       = 1.0;
+    this.zoom = 1.0;
     this.targetZoom = 1.0;
 
     // Score — how many pixels above spawn the player has reached
-    this.score     = 0;
+    this.score = 0;
     this.bestScore = 0;
-    this.startY    = 0; // set in setPlayer
+    this.startY = 0; // set in setPlayer
 
 
     this.shurikens = [];
@@ -78,7 +85,7 @@ export class GameManager {
     this.SHU_MIN_INTERVAL = 0.4;
     this.SHU_MAX_INTERVAL = 1.6;
     this.nextShuInterval = this.SHU_MIN_INTERVAL;
-    
+
     // speed randomness
     this.SHU_SPEED_MIN = 160;
     this.SHU_SPEED_MAX = 420;
@@ -113,8 +120,37 @@ export class GameManager {
     this.nextCamY = player.y + player.height / 2 - 600;
     this._generateCameras();
 
-
+    // Trees
+    this.nextTreeY = player.y + player.height / 2 + 600;
+    this._generateTrees();
   }
+
+  _generateTrees() {
+    if (!this.activePlayer) return;
+    const playerY = this.activePlayer.y + this.activePlayer.height / 2;
+    // Pre-generate a massive static background going 50,000 units high at the start
+    const targetY = playerY - 50000;
+    const GRID_SIZE = 20;
+
+    const visibleWidth = (this.width / 0.75); // max possible zoom is 0.75
+    const halfVis = visibleWidth / 2;
+
+    const startX = Math.floor((this.width / 2 - halfVis - GRID_SIZE) / GRID_SIZE) * GRID_SIZE;
+    const endX = Math.floor((this.width / 2 + halfVis + GRID_SIZE) / GRID_SIZE) * GRID_SIZE;
+
+    while (this.nextTreeY > targetY) {
+      for (let x = startX; x <= endX; x += GRID_SIZE) {
+        if (x === this.WORLD_LEFT - GRID_SIZE || x === this.WORLD_RIGHT) {
+          const isLeft = x === this.WORLD_LEFT - GRID_SIZE;
+          this.borderTiles.push(new BorderTile(x, this.nextTreeY, GRID_SIZE, isLeft));
+        } else if (x >= this.WORLD_LEFT && x < this.WORLD_RIGHT) {
+          this.treeBackgrounds.push(new TreeBackground(x, this.nextTreeY, GRID_SIZE));
+        }
+      }
+      this.nextTreeY -= GRID_SIZE;
+    }
+  }
+
 
   /** Returns a 0–1 difficulty factor based on how high the player has climbed. Reaches 1 at height 2500. */
   _getDifficultyFactor() {
@@ -124,13 +160,13 @@ export class GameManager {
   /** Spawns randomised bushes upward until SPAWN_AHEAD distance is covered. */
   _generateBushes() {
     if (!this.activePlayer) return;
-    const playerY    = this.activePlayer.y + this.activePlayer.height / 2;
-    const targetY    = playerY - this.SPAWN_AHEAD;
-    const margin     = 30;
+    const playerY = this.activePlayer.y + this.activePlayer.height / 2;
+    const targetY = playerY - this.SPAWN_AHEAD;
+    const margin = 30;
     const spawnWidth = this.WORLD_RIGHT - this.WORLD_LEFT - margin * 2;
-    const diff       = this._getDifficultyFactor();
+    const diff = this._getDifficultyFactor();
     // Bushes get sparser as difficulty rises: gap grows from 150–250 up to 240–400
-    const gapMin    = this.BUSH_GAP_MIN    + Math.round(diff * 90);
+    const gapMin = this.BUSH_GAP_MIN + Math.round(diff * 90);
     const gapRandom = this.BUSH_GAP_RANDOM + Math.round(diff * 70);
 
     while (this.nextBushY > targetY) {
@@ -143,7 +179,7 @@ export class GameManager {
   /** Removes bushes that have scrolled too far below the player. */
   _cullBushes() {
     if (!this.activePlayer) return;
-    const playerY   = this.activePlayer.y + this.activePlayer.height / 2;
+    const playerY = this.activePlayer.y + this.activePlayer.height / 2;
     const threshold = playerY + this.CULL_BEHIND;
     this.bushes = this.bushes.filter(b => b.y < threshold);
   }
@@ -153,16 +189,16 @@ export class GameManager {
     if (!this.activePlayer) return;
     const playerY = this.activePlayer.y + this.activePlayer.height / 2;
     const targetY = playerY - this.SPAWN_AHEAD;
-    const diff    = this._getDifficultyFactor();
+    const diff = this._getDifficultyFactor();
     // Cameras get denser as difficulty rises: gap shrinks from 320–540 down to 140–230
-    const gapMin    = Math.max(140, this.CAM_GAP_MIN    - Math.round(diff * 180));
-    const gapRandom = Math.max(90,  this.CAM_GAP_RANDOM - Math.round(diff * 130));
+    const gapMin = Math.max(140, this.CAM_GAP_MIN - Math.round(diff * 180));
+    const gapRandom = Math.max(90, this.CAM_GAP_RANDOM - Math.round(diff * 130));
 
     while (this.nextCamY > targetY) {
       const onLeft = Math.random() < 0.5;
-      const x      = onLeft ? this.WORLD_LEFT : this.WORLD_RIGHT;
-      const angle  = onLeft ? 0 : Math.PI;
-      const phase  = Math.random() * Math.PI * 2;
+      const x = onLeft ? this.WORLD_LEFT : this.WORLD_RIGHT;
+      const angle = onLeft ? 0 : Math.PI;
+      const phase = Math.random() * Math.PI * 2;
       this.securityCameras.push(new SecurityCamera(x, this.nextCamY, angle, phase, diff));
       this.nextCamY -= gapMin + Math.random() * gapRandom;
     }
@@ -173,7 +209,7 @@ export class GameManager {
 
     const playerY = this.activePlayer.y + this.activePlayer.height / 2;
 
-  // 🎯 small, controlled height above player
+    // 🎯 small, controlled height above player
     const baseOffset = 120; // always slightly above
     const randomOffset = Math.random() * 180; // small variation
 
@@ -195,11 +231,11 @@ export class GameManager {
   }
 
 
-  
+
   _checkShurikenCollisions() {
     if (!this.activePlayer || this.isGameOver) return;
 
-  // 🛡 SAFE ZONE: player is on a bush
+    // 🛡 SAFE ZONE: player is on a bush
     if (this.activePlayer.isStatic && this.activePlayer.lastHookedBush) {
       return;
     }
@@ -216,12 +252,12 @@ export class GameManager {
         this.gameOverReason = "shuriken";
         return;
       }
-    } 
+    }
   }
   /** Removes cameras that have scrolled too far below the player. */
   _cullCameras() {
     if (!this.activePlayer) return;
-    const playerY   = this.activePlayer.y + this.activePlayer.height / 2;
+    const playerY = this.activePlayer.y + this.activePlayer.height / 2;
     const threshold = playerY + this.CULL_BEHIND;
     this.securityCameras = this.securityCameras.filter(c => c.y < threshold);
   }
@@ -231,32 +267,32 @@ export class GameManager {
     const colors = ['#2d7a2d', '#256b25', '#1f5c1f', '#3a8a3a', '#4d9e4d'];
     const count = 10 + Math.floor(Math.random() * 6); // 10–15 leaves
     for (let i = 0; i < count; i++) {
-      const angle  = Math.random() * Math.PI * 2;
-      const speed  = 40 + Math.random() * 120;
-      const life   = 1.2 + Math.random() * 1.0;
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 40 + Math.random() * 120;
+      const life = 1.2 + Math.random() * 1.0;
       this.leafParticles.push({
-        x:      bush.x + (Math.random() - 0.5) * bush.radius * 1.5,
-        y:      bush.y + (Math.random() - 0.5) * bush.radius * 1.5,
-        vx:     Math.cos(angle) * speed,
-        vy:     Math.sin(angle) * speed - 60, // slight upward burst
+        x: bush.x + (Math.random() - 0.5) * bush.radius * 1.5,
+        y: bush.y + (Math.random() - 0.5) * bush.radius * 1.5,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 60, // slight upward burst
         life,
         maxLife: life,
-        color:  colors[Math.floor(Math.random() * colors.length)],
-        w:      4 + Math.random() * 4,
-        h:      2 + Math.random() * 2,
-        angle:  Math.random() * Math.PI * 2,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        w: 4 + Math.random() * 4,
+        h: 2 + Math.random() * 2,
+        angle: Math.random() * Math.PI * 2,
         angVel: (Math.random() - 0.5) * 8,
       });
     }
   }
 
   _cullShurikens() {
-  if (!this.activePlayer) return;
+    if (!this.activePlayer) return;
 
-  const playerY = this.activePlayer.y + this.activePlayer.height / 2;
-  const threshold = playerY + this.CULL_BEHIND;
+    const playerY = this.activePlayer.y + this.activePlayer.height / 2;
+    const threshold = playerY + this.CULL_BEHIND;
 
-  this.shurikens = this.shurikens.filter(s => s.y < threshold);
+    this.shurikens = this.shurikens.filter(s => s.y < threshold);
   }
 
   /** Stops the player from leaving the corridor; wall-cling on impact while airborne. */
@@ -264,7 +300,7 @@ export class GameManager {
     if (!this.activePlayer) return;
     const p = this.activePlayer;
 
-    const hitLeft  = p.x < this.WORLD_LEFT;
+    const hitLeft = p.x < this.WORLD_LEFT;
     const hitRight = p.x + p.width > this.WORLD_RIGHT;
 
     if (hitLeft || hitRight) {
@@ -273,9 +309,9 @@ export class GameManager {
 
       if (!p.isStatic) {
         // First contact while airborne → start clinging
-        p.velocity.x    = 0;
-        p.velocity.y    = 0;
-        p.isStatic      = true;
+        p.velocity.x = 0;
+        p.velocity.y = 0;
+        p.isStatic = true;
         p.isWallClinging = true;
       }
     }
@@ -284,7 +320,7 @@ export class GameManager {
     if (p.isWallClinging) {
       p.y += this.WALL_SLIDE_SPEED * dt;
       // Keep x pinned to whichever wall the player is on
-      if (p.x <= this.WORLD_LEFT)                 p.x = this.WORLD_LEFT;
+      if (p.x <= this.WORLD_LEFT) p.x = this.WORLD_LEFT;
       else if (p.x + p.width >= this.WORLD_RIGHT) p.x = this.WORLD_RIGHT - p.width;
     }
   }
@@ -319,8 +355,8 @@ export class GameManager {
 
       if (dist < threshold) {
         if (!this.activePlayer.isStatic && this.activePlayer.lastHookedBush !== bush && !bush.isDisabled) {
-          this.activePlayer.isStatic       = true;
-          this.activePlayer.isWallClinging  = false; // wall-cling ends when catching a bush
+          this.activePlayer.isStatic = true;
+          this.activePlayer.isWallClinging = false; // wall-cling ends when catching a bush
           this.activePlayer.velocity.x = 0;
           this.activePlayer.velocity.y = 0;
           this.activePlayer.x = bush.x - this.activePlayer.width / 2;
@@ -357,7 +393,7 @@ export class GameManager {
       for (const cam of this.securityCameras) {
         if (cam.isPointInCone(px, py)) {
           cam.isDetecting = true;
-          anyDetecting    = true;
+          anyDetecting = true;
         }
       }
     }
@@ -365,7 +401,7 @@ export class GameManager {
     if (anyDetecting) {
       this.detectionLevel = Math.min(1, this.detectionLevel + this.DETECTION_FILL_RATE * dt);
       if (this.detectionLevel >= 1) {
-        this.isGameOver     = true;
+        this.isGameOver = true;
         this.gameOverReason = 'spotted';
       }
     } else {
@@ -388,7 +424,7 @@ export class GameManager {
   _checkGameOver() {
     if (!this.activePlayer || this.isGameOver) return;
     if (this.activePlayer.y + this.activePlayer.height > this.FLOOR_Y) {
-      this.isGameOver     = true;
+      this.isGameOver = true;
       this.gameOverReason = 'floor';
     }
   }
@@ -399,25 +435,30 @@ export class GameManager {
     const p = this.activePlayer;
     p.reset(this.width / 2 - p.width / 2, this.height / 2 - p.height / 2);
 
-    this.bushes          = [];
+    this.bushes = [];
     this.securityCameras = [];
-    this.isGameOver      = false;
-    this.gameOverReason  = null;
-    this.score           = 0;
-    this.startY          = this.height / 2;
-    this.detectionLevel  = 0;
-    this.zoom            = 1.0;
-    this.targetZoom      = 1.0;
-    this.camera.x  = this.width / 2;
-    this.camera.y  = this.height / 2;
+    this.isGameOver = false;
+    this.gameOverReason = null;
+    this.score = 0;
+    this.startY = this.height / 2;
+    this.detectionLevel = 0;
+    this.zoom = 1.0;
+    this.targetZoom = 1.0;
+    this.camera.x = this.width / 2;
+    this.camera.y = this.height / 2;
     this.nextBushY = this.height / 2 - 200;
-    this.nextCamY  = this.height / 2 - 600;
+    this.nextCamY = this.height / 2 - 600;
     this._generateBushes();
     this._generateCameras();
-    this.shurikens    = [];
+    this.shurikens = [];
     this.leafParticles = [];
     this.shuSpawnTimer = 0;
     this.nextShuInterval = 0.8 + Math.random() * 0.8;
+
+    this.treeBackgrounds = [];
+    this.borderTiles = [];
+    this.nextTreeY = this.height / 2 + 600;
+    this._generateTrees();
   }
 
   /** Called every frame — delegates to every registered component. */
@@ -428,8 +469,17 @@ export class GameManager {
     this._clampPlayer(dt);
     this.checkCollisions();
 
-    // Pass raw screen-space mouse so the slingshot can work entirely in screen space,
-    // immune to zoom transitions.
+    // Zoom out while the player is pulling back, return to normal when released
+    this.targetZoom = (this.activePlayer && this.activePlayer.slingshot.isDragging) ? 0.75 : 1.0;
+    this.zoom += (this.targetZoom - this.zoom) * (1 - Math.exp(-6 * dt));
+
+    // Convert screen-space mouse coords to world-space (accounts for zoom)
+    const worldMouse = {
+      ...mouse,
+      x: this.camera.x + (mouse.x - this.width / 2) / this.zoom,
+      y: this.camera.y + (mouse.y - this.height / 2) / this.zoom,
+    };
+
     if (this.activePlayer) {
       this.activePlayer.update(dt, mouse, this.camera, this.zoom);
     }
@@ -441,7 +491,7 @@ export class GameManager {
     // Smooth in both directions — no snap needed since input is now screen-space.
     this.targetZoom = (this.activePlayer && this.activePlayer.slingshot.isDragging) ? 0.75 : 1.0;
     this.zoom += (this.targetZoom - this.zoom) * (1 - Math.exp(-6 * dt));
-    const px = this.activePlayer ? this.activePlayer.x + this.activePlayer.width  / 2 : null;
+    const px = this.activePlayer ? this.activePlayer.x + this.activePlayer.width / 2 : null;
     const py = this.activePlayer ? this.activePlayer.y + this.activePlayer.height / 2 : null;
     for (const cam of this.securityCameras) {
       cam.update(dt, px, py);
@@ -452,7 +502,7 @@ export class GameManager {
     }
     this._checkShurikenCollisions();
 
-// TIMER-BASED SPAWNER
+    // TIMER-BASED SPAWNER
     this.shuSpawnTimer += dt;
 
     if (this.shuSpawnTimer >= this.nextShuInterval) {
@@ -460,8 +510,8 @@ export class GameManager {
 
       this.shuSpawnTimer = 0;
       this.nextShuInterval =
-      this.SHU_MIN_INTERVAL +
-      Math.random() * (this.SHU_MAX_INTERVAL - this.SHU_MIN_INTERVAL);
+        this.SHU_MIN_INTERVAL +
+        Math.random() * (this.SHU_MAX_INTERVAL - this.SHU_MIN_INTERVAL);
     }
 
     this._cullShurikens();
@@ -512,15 +562,15 @@ export class GameManager {
 
   /** Draws an infinite grid pattern in world space so camera movement is visible. */
   _drawBackground() {
-    const GRID_SIZE = 60;
+    const GRID_SIZE = 50;
     const ctx = this.ctx;
 
     // Visible world-space bounds (zoom-corrected: zooming out reveals more world)
-    const halfW = (this.width  / 2) / this.zoom;
+    const halfW = (this.width / 2) / this.zoom;
     const halfH = (this.height / 2) / this.zoom;
-    const visLeft   = this.camera.x - halfW;
-    const visTop    = this.camera.y - halfH;
-    const visRight  = this.camera.x + halfW;
+    const visLeft = this.camera.x - halfW;
+    const visTop = this.camera.y - halfH;
+    const visRight = this.camera.x + halfW;
     const visBottom = this.camera.y + halfH;
 
     // Solid fill
@@ -528,8 +578,8 @@ export class GameManager {
     ctx.fillRect(visLeft, visTop, halfW * 2, halfH * 2);
 
     // Grid lines — snap start to nearest grid boundary
-    const startX = Math.floor(visLeft  / GRID_SIZE) * GRID_SIZE;
-    const startY = Math.floor(visTop   / GRID_SIZE) * GRID_SIZE;
+    const startX = Math.floor(visLeft / GRID_SIZE) * GRID_SIZE;
+    const startY = Math.floor(visTop / GRID_SIZE) * GRID_SIZE;
 
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
@@ -540,34 +590,14 @@ export class GameManager {
       ctx.lineTo(x, visBottom);
     }
     for (let y = startY; y <= visBottom; y += GRID_SIZE) {
-      ctx.moveTo(visLeft,  y);
+      ctx.moveTo(visLeft, y);
       ctx.lineTo(visRight, y);
     }
     ctx.stroke();
   }
 
-  /** Draws darker wall overlays outside the corridor bounds. */
-  _drawWalls() {
-    const ctx = this.ctx;
-    const halfH = (this.height / 2) / this.zoom;
-    const visTop    = this.camera.y - halfH * 2;
-    const visHeight = halfH * 4;
-    const wallExtent = this.width / this.zoom;
-
-    ctx.fillStyle = '#14301a';
-    ctx.fillRect(this.WORLD_LEFT - wallExtent, visTop, wallExtent, visHeight);
-    ctx.fillRect(this.WORLD_RIGHT, visTop, wallExtent, visHeight);
-
-    // Edge lines
-    ctx.strokeStyle = '#0a1f0f';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(this.WORLD_LEFT,  visTop);
-    ctx.lineTo(this.WORLD_LEFT,  visTop + visHeight);
-    ctx.moveTo(this.WORLD_RIGHT, visTop);
-    ctx.lineTo(this.WORLD_RIGHT, visTop + visHeight);
-    ctx.stroke();
-  }
+  // Old shaded walls removed in favor of BorderTiles
+  // }
 
   /** Draws the kill floor across the full corridor width (world space). */
   _drawFloor() {
@@ -591,8 +621,8 @@ export class GameManager {
   _drawHUD() {
     const ctx = this.ctx;
     ctx.save();
-    ctx.shadowColor   = 'rgba(0, 0, 0, 0.8)';
-    ctx.shadowBlur    = 4;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+    ctx.shadowBlur = 4;
     ctx.shadowOffsetX = 1;
     ctx.shadowOffsetY = 1;
 
@@ -636,10 +666,10 @@ export class GameManager {
   /** Darkens the screen edges and pulses red while a camera is detecting the player. */
   _drawVignette() {
     const ctx = this.ctx;
-    const cx  = this.width  / 2;
-    const cy  = this.height / 2;
-    const r1  = Math.min(this.width, this.height) * 0.18;
-    const r2  = Math.max(this.width, this.height) * 0.85;
+    const cx = this.width / 2;
+    const cy = this.height / 2;
+    const r1 = Math.min(this.width, this.height) * 0.18;
+    const r2 = Math.max(this.width, this.height) * 0.85;
 
     // Permanent dark vignette
     const vg = ctx.createRadialGradient(cx, cy, r1, cx, cy, r2);
@@ -707,7 +737,27 @@ export class GameManager {
     ctx.translate(-this.camera.x, -this.camera.y);
 
     this._drawBackground();
-    this._drawWalls();
+
+    // Visible bounds for rendering optimization
+    const halfW = (this.width / 2) / this.zoom;
+    const halfH = (this.height / 2) / this.zoom;
+    const visTop = this.camera.y - halfH;
+    const visBottom = this.camera.y + halfH;
+
+    // Trees
+    for (const tree of this.treeBackgrounds) {
+      if (tree.y + tree.size >= visTop && tree.y <= visBottom) {
+        tree.draw(ctx);
+      }
+    }
+
+    // Border tiles
+    for (const border of this.borderTiles) {
+      if (border.y + border.size >= visTop && border.y <= visBottom) {
+        border.draw(ctx);
+      }
+    }
+
     this._drawFloor();
 
     // Security cameras (drawn before entities so cone appears behind player/bushes)
@@ -737,7 +787,7 @@ export class GameManager {
       ctx.restore();
     }
 
-// Shurikens
+    // Shurikens
     for (const shu of this.shurikens) {
       shu.draw(ctx);
     }
