@@ -1,11 +1,20 @@
 const sharedSprite = new Image();
-sharedSprite.src = 'assets/art/tilemap_edited_packed.png';
+// sharedSprite.src = 'assets/art/tilemap_edited_packed.png';
+sharedSprite.src = 'assets/art/bush.png';
+// 
+
+// const BUSH_SPRITE_CONFIG = {
+//   sx: 18 * 17,      // Bush tile x coordinates (customize here)
+//   sy: 18 * 0,      // Bush tile y coordinates (customize here)
+//   sWidth: 18 * 3,
+//   sHeight: 18 * 3
+// };
 
 const BUSH_SPRITE_CONFIG = {
-  sx: 18 * 17,      // Bush tile x coordinates (customize here)
-  sy: 18 * 0,      // Bush tile y coordinates (customize here)
-  sWidth: 18 * 3,
-  sHeight: 18 * 3
+  sx: 0,      // Bush tile x coordinates (customize here)
+  sy: 0,      // Bush tile y coordinates (customize here)
+  sWidth: 800,
+  sHeight: 800
 };
 
 // const BUSH_OVERLAY_SPRITE_CONFIG = {
