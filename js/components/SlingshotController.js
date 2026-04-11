@@ -91,19 +91,33 @@ export class SlingshotController {
     const dragTipX = this.anchor.x + this.dragDx;
     const dragTipY = this.anchor.y + this.dragDy;
 
-    // Rubber band
+    // Rubber band — black outline first, then colored line on top
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(dragTipX, dragTipY);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.lineWidth = (4 / zoom) + (2 / zoom);
+    ctx.stroke();
+
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(dragTipX, dragTipY);
     ctx.strokeStyle = '#888888';
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 4 / zoom;
     ctx.stroke();
 
-    // Max-drag circle — radius in world units = screen pixels / zoom → constant screen size
+    // Max-drag circle — black outline first, then colored circle on top
+    const circleRadius = this.maxDragDistance / zoom;
     ctx.beginPath();
-    ctx.arc(this.anchor.x, this.anchor.y, this.maxDragDistance / zoom, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(200, 200, 200, 0.3)';
-    ctx.lineWidth = 1;
+    ctx.arc(this.anchor.x, this.anchor.y, circleRadius, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.lineWidth = 3 / zoom;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(this.anchor.x, this.anchor.y, circleRadius, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(200, 200, 200, 0.6)';
+    ctx.lineWidth = 1 / zoom;
     ctx.stroke();
 
     // Trajectory preview (5 dots, 0.05 s apart)
@@ -117,8 +131,15 @@ export class SlingshotController {
       const dotX  = cx + vx * t;
       const dotY  = cy + vy * t + 0.5 * gravity * t * t;
       const alpha = (1 - (i - 1) / STEPS) * 0.75;
+      const r = 3 / zoom;
+      // Black outline
       ctx.beginPath();
-      ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
+      ctx.arc(dotX, dotY, r + (1 / zoom), 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
+      ctx.fill();
+      // Colored dot
+      ctx.beginPath();
+      ctx.arc(dotX, dotY, r, 0, Math.PI * 2);
       ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
       ctx.fill();
     }

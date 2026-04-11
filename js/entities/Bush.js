@@ -32,78 +32,62 @@ export class Bush {
     this.type = 'bush';
     this.isStatic = true; // No physics apply to the bush
     this.isDisabled = false;
+    this.isDead = false;
+
+    // Pop animation state
+    this._popping = false;
+    this._popTimer = 0;
+    this._popDuration = 0.35;
 
     this.sprite = sharedSprite;
     this.spriteConfig = BUSH_SPRITE_CONFIG;
-    // this.overlaySpriteConfig = BUSH_OVERLAY_SPRITE_CONFIG;
   }
 
-  update(dt, mouse) {
-    // Bush logic (static, does nothing right now)
+  /** Trigger the pop animation — call when the player leaves this bush. */
+  pop() {
+    this.isDisabled = true;
+    this._popping = true;
+    this._popTimer = 0;
+  }
+
+  update(dt) {
+    if (!this._popping) return;
+    this._popTimer += dt;
+    if (this._popTimer >= this._popDuration) {
+      this.isDead = true;
+    }
   }
 
   draw(ctx) {
+    if (this.isDead) return;
     if (!this.sprite.complete || this.sprite.naturalWidth === 0) return;
 
+    const drawSize = this.radius * 3;
+
     ctx.save();
-    const drawSize = this.radius * 3; // roughly 44px
-    const dx = this.x - drawSize / 2;
-    const dy = this.y - drawSize / 2;
+    ctx.translate(this.x, this.y);
 
-    const drawSize2 = this.radius * 1.5;
-    const dx2 = this.x - drawSize2 / 2;
-    const dy2 = this.y - drawSize2 / 2;
-
-    if (this.isDisabled) {
-      // Flattened, squished look when used
-      ctx.translate(this.x, this.y + this.radius / 2);
-      // ctx.scale(1, 0.4);
-      ctx.drawImage(
-        this.sprite,
-        this.spriteConfig.sx,
-        this.spriteConfig.sy,
-        this.spriteConfig.sWidth,
-        this.spriteConfig.sHeight,
-        -drawSize / 2,
-        -drawSize / 2 - this.radius / 2,
-        drawSize,
-        drawSize
-      );
-      // ctx.drawImage(
-      //   this.sprite,
-      //   this.overlaySpriteConfig.sx,
-      //   this.overlaySpriteConfig.sy,
-      //   this.overlaySpriteConfig.sWidth,
-      //   this.overlaySpriteConfig.sHeight,
-      //   -drawSize2 / 2,
-      //   -drawSize2 / 2 - this.radius / 2,
-      //   drawSize2,
-      //   drawSize2
-      // );
-    } else {
-      ctx.drawImage(
-        this.sprite,
-        this.spriteConfig.sx,
-        this.spriteConfig.sy,
-        this.spriteConfig.sWidth,
-        this.spriteConfig.sHeight,
-        dx,
-        dy,
-        drawSize,
-        drawSize
-      );
-      // ctx.drawImage(
-      //   this.sprite,
-      //   this.overlaySpriteConfig.sx,
-      //   this.overlaySpriteConfig.sy,
-      //   this.overlaySpriteConfig.sWidth,
-      //   this.overlaySpriteConfig.sHeight,
-      //   dx2,
-      //   dy2,
-      //   drawSize2,
-      //   drawSize2
-      // );
+    if (this._popping) {
+      const t = Math.min(this._popTimer / this._popDuration, 1);
+      // Scale up from 1 → 1.6 as t goes 0 → 1
+      const scale = 1 + t * 0.6;
+      // Fade out: alpha 1 → 0
+      const alpha = 1 - t;
+      ctx.globalAlpha = alpha;
+      ctx.scale(scale, scale);
     }
+
+    ctx.drawImage(
+      this.sprite,
+      this.spriteConfig.sx,
+      this.spriteConfig.sy,
+      this.spriteConfig.sWidth,
+      this.spriteConfig.sHeight,
+      -drawSize / 2,
+      -drawSize / 2,
+      drawSize,
+      drawSize
+    );
 
     ctx.restore();
   }

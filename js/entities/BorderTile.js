@@ -39,8 +39,8 @@ export class BorderTile {
                 this.spriteConfig.sHeight,
                 Math.floor(this.x),
                 Math.floor(this.y),
-                this.size,
-                this.size
+                this.size + 1,
+                this.size + 1
             );
         }
     }

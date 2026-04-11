@@ -153,7 +153,7 @@ export class GameManager {
     const targetY = playerY - 50000;
     const GRID_SIZE = 20;
 
-    const visibleWidth = (this.width / 0.75); // max possible zoom is 0.75
+    const visibleWidth = (this.width / 0.87); // max possible zoom is 0.87
     const halfVis = visibleWidth / 2;
 
     const startX = Math.floor((this.width / 2 - halfVis - GRID_SIZE) / GRID_SIZE) * GRID_SIZE;
@@ -209,7 +209,7 @@ export class GameManager {
     if (!this.activePlayer) return;
     const playerY = this.activePlayer.y + this.activePlayer.height / 2;
     const threshold = playerY + this.CULL_BEHIND;
-    this.bushes = this.bushes.filter(b => b.y < threshold);
+    this.bushes = this.bushes.filter(b => !b.isDead && b.y < threshold);
   }
 
   /** Spawns security cameras upward until SPAWN_AHEAD distance is covered. */
@@ -467,7 +467,7 @@ _generateSpikes() {
       } else {
         if (this.activePlayer.lastHookedBush === bush) {
           this.activePlayer.lastHookedBush = null;
-          bush.isDisabled = true;
+          bush.pop();
           this._spawnLeafParticles(bush);
         }
       }
@@ -571,7 +571,7 @@ _generateSpikes() {
     this.checkCollisions();
 
     // Zoom out while the player is pulling back, return to normal when released
-    this.targetZoom = (this.activePlayer && this.activePlayer.slingshot.isDragging) ? 0.75 : 1.0;
+    this.targetZoom = (this.activePlayer && this.activePlayer.slingshot.isDragging) ? 0.87 : 1.0;
     this.zoom += (this.targetZoom - this.zoom) * (1 - Math.exp(-6 * dt));
 
     // Convert screen-space mouse coords to world-space (accounts for zoom)
@@ -590,7 +590,7 @@ _generateSpikes() {
 
     // Zoom update comes AFTER player.update so isDragging reflects this frame's state.
     // Smooth in both directions — no snap needed since input is now screen-space.
-    this.targetZoom = (this.activePlayer && this.activePlayer.slingshot.isDragging) ? 0.75 : 1.0;
+    this.targetZoom = (this.activePlayer && this.activePlayer.slingshot.isDragging) ? 0.87 : 1.0;
     this.zoom += (this.targetZoom - this.zoom) * (1 - Math.exp(-6 * dt));
     const px = this.activePlayer ? this.activePlayer.x + this.activePlayer.width / 2 : null;
     const py = this.activePlayer ? this.activePlayer.y + this.activePlayer.height / 2 : null;
